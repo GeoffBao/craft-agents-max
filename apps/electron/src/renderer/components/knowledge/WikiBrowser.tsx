@@ -3,7 +3,7 @@ import { useAtom, useAtomValue } from 'jotai'
 import { ArrowLeft, ExternalLink, Hash, FileText, BookOpen, Clock } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import type { VaultDocument } from '@craft-agent/knowledge-base'
-import { kbSelectedArticleAtom, kbAllDocsAtom, kbRecentPathsAtom, kbStatusAtom } from '@/atoms/knowledge'
+import { kbSelectedArticleAtom, kbAllDocsAtom, kbRecentPathsAtom, kbStatusAtom, kbVaultRootAtom } from '@/atoms/knowledge'
 
 interface Props {
   relativePath: string | null
@@ -49,9 +49,34 @@ function extractToc(body: string): TocEntry[] {
 
 export function WikiBrowser({ relativePath, onNavigate, onBack }: Props) {
   const [article, setArticle] = useAtom(kbSelectedArticleAtom)
+  const allDocs = useAtomValue(kbAllDocsAtom)
+  const vaultRoot = useAtomValue(kbVaultRootAtom)
   const [loading, setLoading] = React.useState(false)
   const [activeTocId, setActiveTocId] = React.useState<string>('')
   const contentRef = React.useRef<HTMLDivElement>(null)
+
+  // title → relativePath lookup map for wikilink resolution
+  const titleToPath = React.useMemo(() => {
+    const map = new Map<string, string>()
+    for (const doc of allDocs) {
+      map.set(doc.title.toLowerCase(), doc.relativePath)
+      const stem = doc.relativePath.split('/').pop()?.replace(/\.md$/i, '')
+      if (stem) map.set(stem.toLowerCase(), doc.relativePath)
+    }
+    return map
+  }, [allDocs])
+
+  const resolveWikilink = React.useCallback((target: string): string => {
+    return titleToPath.get(target.toLowerCase()) ?? target
+  }, [titleToPath])
+
+  // Vault-relative directory of the current article (for resolving relative image paths via vault://)
+  const articleVaultDir = React.useMemo(() => {
+    if (!relativePath) return ''
+    const parts = relativePath.split('/')
+    parts.pop()
+    return parts.join('/')
+  }, [relativePath])
 
   React.useEffect(() => {
     if (!relativePath) { setArticle(null); return }
@@ -156,7 +181,11 @@ export function WikiBrowser({ relativePath, onNavigate, onBack }: Props) {
 
         {/* Article body */}
         <div ref={contentRef} className="flex-1 overflow-y-auto min-h-0 px-6 py-5">
-          <WikiMarkdown body={article.body} onWikilink={onNavigate} />
+          <WikiMarkdown
+            body={article.body}
+            onWikilink={(target) => onNavigate(resolveWikilink(target))}
+            articleVaultDir={articleVaultDir}
+          />
 
           {/* Backlinks */}
           {article.backlinks.length > 0 && (
@@ -339,16 +368,70 @@ function KnowledgeHome({ onNavigate }: { onNavigate: (path: string) => void }) {
   )
 }
 
+// ── Mermaid diagram component ─────────────────────────────────────────────────
+
+function MermaidDiagram({ code }: { code: string }) {
+  const containerRef = React.useRef<HTMLDivElement>(null)
+  const [error, setError] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    if (!containerRef.current) return
+    let cancelled = false
+
+    import('mermaid').then(({ default: mermaid }) => {
+      if (cancelled) return
+      mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' })
+      const id = `mermaid-${Math.random().toString(36).slice(2)}`
+      mermaid.render(id, code)
+        .then(({ svg }) => {
+          if (!cancelled && containerRef.current) {
+            containerRef.current.innerHTML = svg
+          }
+        })
+        .catch((e: unknown) => {
+          if (!cancelled) setError(e instanceof Error ? e.message : String(e))
+        })
+    }).catch(() => setError('Mermaid not available'))
+
+    return () => { cancelled = true }
+  }, [code])
+
+  if (error) {
+    return (
+      <pre className="text-xs text-red-400 bg-muted/40 p-2 rounded overflow-auto">
+        {`[mermaid error] ${error}`}
+      </pre>
+    )
+  }
+  return <div ref={containerRef} className="my-3 overflow-auto [&>svg]:max-w-full" />
+}
+
 // ── WikiMarkdown ──────────────────────────────────────────────────────────────
 
-function WikiMarkdown({ body, onWikilink }: { body: string; onWikilink: (path: string) => void }) {
-  const processed = body.replace(
-    /\[\[([^\]|#]+)(?:\|([^\]]+))?\]\]/g,
-    (_m, target, display) => {
+interface WikiMarkdownProps {
+  body: string
+  onWikilink: (path: string) => void
+  articleVaultDir: string
+}
+
+function WikiMarkdown({ body, onWikilink, articleVaultDir }: WikiMarkdownProps) {
+  // Pre-process: [[wikilinks]] and ![[image embeds]]
+  const processed = body
+    // Obsidian image embeds: ![[foo.png]] → standard markdown image via vault://
+    .replace(/!\[\[([^\]|]+?)(?:\|[^\]]+)?\]\]/g, (_m, src) => {
+      // Check if it's an image by extension
+      if (/\.(png|jpg|jpeg|gif|webp|svg|bmp|tiff)$/i.test(src)) {
+        const vaultSrc = articleVaultDir ? `vault://${articleVaultDir}/${src}` : `vault://${src}`
+        return `![${src}](${vaultSrc})`
+      }
+      // Non-image embed: render as wikilink
+      return `[${src}](wikilink:${encodeURIComponent(src.trim())})`
+    })
+    // Wikilinks: [[Title|Display]] → custom href
+    .replace(/\[\[([^\]|#]+)(?:\|([^\]]+))?\]\]/g, (_m, target, display) => {
       const label = display ?? target
       return `[${label}](wikilink:${encodeURIComponent(target.trim())})`
-    },
-  )
+    })
 
   return (
     <div className="prose prose-sm dark:prose-invert max-w-none
@@ -358,6 +441,7 @@ function WikiMarkdown({ body, onWikilink }: { body: string; onWikilink: (path: s
       prose-code:text-xs prose-code:bg-muted/60 prose-code:rounded prose-code:px-1
       prose-pre:bg-muted/60 prose-pre:border prose-pre:border-border/50
       prose-blockquote:border-l-primary/40 prose-blockquote:text-muted-foreground
+      prose-img:rounded-md prose-img:border prose-img:border-border/30
     ">
       <ReactMarkdown
         components={{
@@ -399,6 +483,36 @@ function WikiMarkdown({ body, onWikilink }: { body: string; onWikilink: (path: s
                 {children}
                 <ExternalLink className="h-3 w-3 inline flex-shrink-0" />
               </a>
+            )
+          },
+          img: ({ src, alt }) => {
+            if (!src) return null
+            // Resolve relative paths to vault:// (served by custom protocol from vault root)
+            const resolvedSrc =
+              src.startsWith('http') || src.startsWith('file://') || src.startsWith('vault://')
+                ? src
+                : articleVaultDir
+                  ? `vault://${articleVaultDir}/${src}`
+                  : `vault://${src}`
+            return (
+              <img
+                src={resolvedSrc}
+                alt={alt ?? ''}
+                className="max-w-full rounded-md border border-border/30 my-2"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+              />
+            )
+          },
+          code: ({ className, children }) => {
+            const lang = (className ?? '').replace('language-', '')
+            const code = String(children).trim()
+            if (lang === 'mermaid') {
+              return <MermaidDiagram code={code} />
+            }
+            return (
+              <code className={className}>
+                {children}
+              </code>
             )
           },
         }}

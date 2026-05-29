@@ -33,6 +33,10 @@ import {
   Bot,
   Info,
   MailOpen,
+  Network,
+  BookMarked,
+  Layout,
+  Library,
 } from "lucide-react"
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
 import { SourceAvatar } from "@/components/ui/source-avatar"
@@ -1706,8 +1710,13 @@ function AppShellContent({
 
   // Handler for knowledge view
   const handleKnowledgeClick = useCallback(() => {
-    navigate(routes.view.knowledge())
+    navigate(routes.view.knowledge('wiki'))
   }, [])
+  const handleKnowledgeWikiClick = useCallback(() => navigate(routes.view.knowledge('wiki')), [])
+  const handleKnowledgeJourneyClick = useCallback(() => navigate(routes.view.knowledge('journey')), [])
+  const handleKnowledgeGraphClick = useCallback(() => navigate(routes.view.knowledge('graph')), [])
+  const handleKnowledgeBooksClick = useCallback(() => navigate(routes.view.knowledge('books')), [])
+  const handleKnowledgeCanvasClick = useCallback(() => navigate(routes.view.knowledge('canvas')), [])
 
   // Handlers for automations view
   const handleAutomationsClick = useCallback(() => {
@@ -2445,6 +2454,46 @@ function AppShellContent({
                       icon: BookOpen,
                       variant: isKnowledgeNavigation(navState) ? "default" : "ghost",
                       onClick: handleKnowledgeClick,
+                      expandable: true,
+                      expanded: isExpanded('nav:knowledge'),
+                      onToggle: () => toggleExpanded('nav:knowledge'),
+                      items: [
+                        {
+                          id: "nav:knowledge:wiki",
+                          title: "Wiki",
+                          icon: BookOpen,
+                          variant: (isKnowledgeNavigation(navState) && navState.view === 'wiki') ? "default" : "ghost",
+                          onClick: handleKnowledgeWikiClick,
+                        },
+                        {
+                          id: "nav:knowledge:journey",
+                          title: "Journey",
+                          icon: BookMarked,
+                          variant: (isKnowledgeNavigation(navState) && navState.view === 'journey') ? "default" : "ghost",
+                          onClick: handleKnowledgeJourneyClick,
+                        },
+                        {
+                          id: "nav:knowledge:graph",
+                          title: "Graph",
+                          icon: Network,
+                          variant: (isKnowledgeNavigation(navState) && navState.view === 'graph') ? "default" : "ghost",
+                          onClick: handleKnowledgeGraphClick,
+                        },
+                        {
+                          id: "nav:knowledge:books",
+                          title: "Books",
+                          icon: Library,
+                          variant: (isKnowledgeNavigation(navState) && navState.view === 'books') ? "default" : "ghost",
+                          onClick: handleKnowledgeBooksClick,
+                        },
+                        {
+                          id: "nav:knowledge:canvas",
+                          title: "Canvas",
+                          icon: Layout,
+                          variant: (isKnowledgeNavigation(navState) && navState.view === 'canvas') ? "default" : "ghost",
+                          onClick: handleKnowledgeCanvasClick,
+                        },
+                      ],
                     },
                     {
                       id: "nav:automations",

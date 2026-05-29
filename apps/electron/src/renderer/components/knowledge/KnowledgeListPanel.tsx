@@ -13,6 +13,7 @@ import {
   kbSearchLoadingAtom,
   kbAllDocsAtom,
   kbRecentPathsAtom,
+  kbVaultRootAtom,
 } from '@/atoms/knowledge'
 import type { KBStatus } from '@/atoms/knowledge'
 import type { VaultDocument, RagChunk } from '@craft-agent/knowledge-base'
@@ -26,13 +27,14 @@ interface Props {
 // ─── constants ───────────────────────────────────────────────────────────────
 
 const VIEW_TABS: { view: KnowledgeView; icon: React.ComponentType<{ className?: string }>; label: string }[] = [
-  { view: 'wiki',     icon: BookOpen,   label: 'Browse' },
-  { view: 'journey',  icon: BookMarked, label: 'Journey' },
+  { view: 'wiki',     icon: BookOpen,   label: 'Wiki' },
   { view: 'graph',    icon: Network,    label: 'Graph' },
-  { view: 'books',    icon: BookOpen,   label: 'Books' },
+  { view: 'books',    icon: BookMarked, label: 'Books' },
   { view: 'canvas',   icon: Layout,     label: 'Canvas' },
   { view: 'settings', icon: Settings,   label: 'Settings' },
 ]
+
+const MAX_SUBSECTION_ITEMS = 30
 
 const SECTION_ORDER = ['Wiki', 'Notes', 'Journey', 'Projects', 'Raw']
 const SECTION_DOT: Record<string, string> = {
@@ -66,6 +68,9 @@ export function KnowledgeListPanel({ currentView, onViewChange, onArticleSelect 
   const setLoading = useSetAtom(kbSearchLoadingAtom)
   const [allDocs, setAllDocs] = useAtom(kbAllDocsAtom)
   const [recentPaths, setRecentPaths] = useAtom(kbRecentPathsAtom)
+  const setVaultRoot = useSetAtom(kbVaultRootAtom)
+  // subsection "show more" state: key = "Section/sub", value = expanded
+  const [showMoreSubs, setShowMoreSubs] = React.useState<Set<string>>(new Set())
 
   const [expandedSections, setExpandedSections] = React.useState<Set<string>>(new Set(['Wiki']))
   const [expandedSubsections, setExpandedSubsections] = React.useState<Set<string>>(new Set())
@@ -138,8 +143,11 @@ export function KnowledgeListPanel({ currentView, onViewChange, onArticleSelect 
       window.electronAPI.knowledgeListDocs()
         .then(docs => setAllDocs(docs))
         .catch(() => {})
+      window.electronAPI.knowledgeGetConfig()
+        .then(cfg => { if (cfg?.vaultPath) setVaultRoot(cfg.vaultPath) })
+        .catch(() => {})
     }
-  }, [kbStatus.status, allDocs.length, setAllDocs])
+  }, [kbStatus.status, allDocs.length, setAllDocs, setVaultRoot])
 
   React.useEffect(() => {
     const poll = () => {
@@ -205,6 +213,13 @@ export function KnowledgeListPanel({ currentView, onViewChange, onArticleSelect 
       return next
     })
 
+  const toggleShowMore = (key: string) =>
+    setShowMoreSubs(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key); else next.add(key)
+      return next
+    })
+
   const isSearching = query.trim().length > 0
 
   // ── render ────────────────────────────────────────────────────────────────
@@ -212,26 +227,26 @@ export function KnowledgeListPanel({ currentView, onViewChange, onArticleSelect 
   return (
     <div className="flex flex-col h-full overflow-hidden">
 
-      {/* ── View icon tabs ── */}
-      <div className="flex items-center gap-0.5 px-2 pt-2 pb-1.5 flex-shrink-0 border-b border-border/40">
+      {/* ── View tabs (labeled, titlebar-no-drag to avoid macOS window-drag area) ── */}
+      <div className="titlebar-no-drag flex items-center gap-0.5 px-2 pt-2 pb-1.5 flex-shrink-0 border-b border-border/40 overflow-x-auto scrollbar-none">
         {VIEW_TABS.map(({ view, icon: Icon, label }) => (
           <button
             key={view}
             onClick={() => onViewChange(view)}
-            title={label}
-            className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors ${
+            className={`titlebar-no-drag flex items-center gap-1.5 px-2.5 h-7 rounded-md text-xs font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
               currentView === view
                 ? 'bg-accent text-accent-foreground'
                 : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
             }`}
           >
-            <Icon className="h-3.5 w-3.5" />
+            <Icon className="h-3.5 w-3.5 flex-shrink-0" />
+            {label}
           </button>
         ))}
-        <div className="flex-1" />
+        <div className="flex-1 min-w-2" />
         {/* Status indicator */}
         <div
-          className={`w-1.5 h-1.5 rounded-full mr-1 ${
+          className={`w-1.5 h-1.5 rounded-full mr-1 flex-shrink-0 ${
             kbStatus.status === 'ready'   ? 'bg-green-500' :
             kbStatus.status === 'loading' ? 'bg-amber-500 animate-pulse' :
             kbStatus.status === 'error'   ? 'bg-red-500' : 'bg-muted-foreground/40'
@@ -298,9 +313,11 @@ export function KnowledgeListPanel({ currentView, onViewChange, onArticleSelect 
             sectionTree={sectionTree}
             expandedSections={expandedSections}
             expandedSubsections={expandedSubsections}
+            showMoreSubs={showMoreSubs}
             recentDocs={recentDocs}
             onToggleSection={toggleSection}
             onToggleSubsection={toggleSubsection}
+            onToggleShowMore={toggleShowMore}
             onArticleSelect={handleArticleSelect}
           />
         )}
@@ -315,15 +332,17 @@ interface BrowsePaneProps {
   sectionTree: Map<string, SectionData>
   expandedSections: Set<string>
   expandedSubsections: Set<string>
+  showMoreSubs: Set<string>
   recentDocs: VaultDocument[]
   onToggleSection: (s: string) => void
   onToggleSubsection: (key: string) => void
+  onToggleShowMore: (key: string) => void
   onArticleSelect: (path: string) => void
 }
 
 function BrowsePane({
-  sectionTree, expandedSections, expandedSubsections,
-  recentDocs, onToggleSection, onToggleSubsection, onArticleSelect,
+  sectionTree, expandedSections, expandedSubsections, showMoreSubs,
+  recentDocs, onToggleSection, onToggleSubsection, onToggleShowMore, onArticleSelect,
 }: BrowsePaneProps) {
   // Sections in preferred order, then any extras
   const orderedSections = [
@@ -410,11 +429,28 @@ function BrowsePane({
                             {subDocs.length}
                           </span>
                         </button>
-                        {subExpanded && subDocs.map(doc => (
-                          <div key={doc.id} className="pl-4">
-                            <DocRow doc={doc} onSelect={onArticleSelect} compact />
-                          </div>
-                        ))}
+                        {subExpanded && (() => {
+                          const showAll = showMoreSubs.has(subKey)
+                          const visible = showAll ? subDocs : subDocs.slice(0, MAX_SUBSECTION_ITEMS)
+                          const remaining = subDocs.length - MAX_SUBSECTION_ITEMS
+                          return (
+                            <>
+                              {visible.map(doc => (
+                                <div key={doc.id} className="pl-4">
+                                  <DocRow doc={doc} onSelect={onArticleSelect} compact />
+                                </div>
+                              ))}
+                              {!showAll && remaining > 0 && (
+                                <button
+                                  onClick={() => onToggleShowMore(subKey)}
+                                  className="w-full text-left pl-10 pr-3 py-1 text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+                                >
+                                  Show {remaining} more…
+                                </button>
+                              )}
+                            </>
+                          )
+                        })()}
                       </div>
                     )
                   })}
