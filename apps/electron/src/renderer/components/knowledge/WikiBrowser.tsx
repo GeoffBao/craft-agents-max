@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useAtom, useAtomValue } from 'jotai'
-import { ArrowLeft, ExternalLink, Hash, FileText, BookOpen, Clock } from 'lucide-react'
+import { ArrowLeft, ExternalLink, FileText, BookOpen, Clock, Maximize2, X } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import type { VaultDocument } from '@craft-agent/knowledge-base'
 import { kbSelectedArticleAtom, kbAllDocsAtom, kbRecentPathsAtom, kbStatusAtom, kbVaultRootAtom } from '@/atoms/knowledge'
@@ -368,11 +368,42 @@ function KnowledgeHome({ onNavigate }: { onNavigate: (path: string) => void }) {
   )
 }
 
+// ── Zoom overlay ──────────────────────────────────────────────────────────────
+
+function ZoomOverlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  React.useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+  return (
+    <div
+      className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-8"
+      onClick={onClose}
+    >
+      <div
+        className="relative max-w-full max-h-full overflow-auto rounded-lg"
+        onClick={e => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors"
+        >
+          <X className="h-4 w-4" />
+        </button>
+        {children}
+      </div>
+    </div>
+  )
+}
+
 // ── Mermaid diagram component ─────────────────────────────────────────────────
 
 function MermaidDiagram({ code }: { code: string }) {
   const containerRef = React.useRef<HTMLDivElement>(null)
   const [error, setError] = React.useState<string | null>(null)
+  const [zoomed, setZoomed] = React.useState(false)
+  const [svg, setSvg] = React.useState<string>('')
 
   React.useEffect(() => {
     if (!containerRef.current) return
@@ -383,9 +414,10 @@ function MermaidDiagram({ code }: { code: string }) {
       mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' })
       const id = `mermaid-${Math.random().toString(36).slice(2)}`
       mermaid.render(id, code)
-        .then(({ svg }) => {
-          if (!cancelled && containerRef.current) {
-            containerRef.current.innerHTML = svg
+        .then(({ svg: renderedSvg }) => {
+          if (!cancelled) {
+            setSvg(renderedSvg)
+            if (containerRef.current) containerRef.current.innerHTML = renderedSvg
           }
         })
         .catch((e: unknown) => {
@@ -403,7 +435,31 @@ function MermaidDiagram({ code }: { code: string }) {
       </pre>
     )
   }
-  return <div ref={containerRef} className="my-3 overflow-auto [&>svg]:max-w-full" />
+
+  return (
+    <>
+      <div className="relative group my-3">
+        <div ref={containerRef} className="overflow-auto [&>svg]:max-w-full" />
+        {svg && (
+          <button
+            onClick={() => setZoomed(true)}
+            className="absolute top-1 right-1 p-1 rounded bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+            title="Zoom"
+          >
+            <Maximize2 className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+      {zoomed && (
+        <ZoomOverlay onClose={() => setZoomed(false)}>
+          <div
+            className="bg-background rounded-lg p-6 max-w-[90vw] max-h-[90vh] overflow-auto"
+            dangerouslySetInnerHTML={{ __html: svg }}
+          />
+        </ZoomOverlay>
+      )}
+    </>
+  )
 }
 
 // ── WikiMarkdown ──────────────────────────────────────────────────────────────
@@ -444,6 +500,7 @@ function WikiMarkdown({ body, onWikilink, articleVaultDir }: WikiMarkdownProps) 
       prose-img:rounded-md prose-img:border prose-img:border-border/30
     ">
       <ReactMarkdown
+        urlTransform={(url) => url}
         components={{
           h1: ({ children, ...props }) => {
             const text = String(children)
@@ -487,21 +544,13 @@ function WikiMarkdown({ body, onWikilink, articleVaultDir }: WikiMarkdownProps) 
           },
           img: ({ src, alt }) => {
             if (!src) return null
-            // Resolve relative paths to vault:// (served by custom protocol from vault root)
             const resolvedSrc =
               src.startsWith('http') || src.startsWith('file://') || src.startsWith('vault://')
                 ? src
                 : articleVaultDir
                   ? `vault://${articleVaultDir}/${src}`
                   : `vault://${src}`
-            return (
-              <img
-                src={resolvedSrc}
-                alt={alt ?? ''}
-                className="max-w-full rounded-md border border-border/30 my-2"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-              />
-            )
+            return <ZoomableImage src={resolvedSrc} alt={alt ?? ''} />
           },
           code: ({ className, children }) => {
             const lang = (className ?? '').replace('language-', '')
@@ -520,6 +569,41 @@ function WikiMarkdown({ body, onWikilink, articleVaultDir }: WikiMarkdownProps) 
         {processed}
       </ReactMarkdown>
     </div>
+  )
+}
+
+function ZoomableImage({ src, alt }: { src: string; alt: string }) {
+  const [zoomed, setZoomed] = React.useState(false)
+  const [failed, setFailed] = React.useState(false)
+  if (failed) return null
+  return (
+    <>
+      <span className="relative inline-block group my-2">
+        <img
+          src={src}
+          alt={alt}
+          className="max-w-full rounded-md border border-border/30 cursor-zoom-in block"
+          onError={() => setFailed(true)}
+          onClick={() => setZoomed(true)}
+        />
+        <button
+          onClick={() => setZoomed(true)}
+          className="absolute top-1 right-1 p-1 rounded bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+          title="Zoom"
+        >
+          <Maximize2 className="h-3.5 w-3.5" />
+        </button>
+      </span>
+      {zoomed && (
+        <ZoomOverlay onClose={() => setZoomed(false)}>
+          <img
+            src={src}
+            alt={alt}
+            className="max-w-[90vw] max-h-[90vh] rounded-lg object-contain"
+          />
+        </ZoomOverlay>
+      )}
+    </>
   )
 }
 

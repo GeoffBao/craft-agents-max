@@ -2,7 +2,6 @@ import * as React from 'react'
 import { useAtom, useSetAtom } from 'jotai'
 import {
   Search, X, ChevronRight, ChevronDown,
-  Network, BookOpen, BookMarked, Layout, Settings,
   FileText, Clock, Folder,
 } from 'lucide-react'
 import type { KnowledgeView } from '../../../shared/types'
@@ -25,14 +24,6 @@ interface Props {
 }
 
 // ─── constants ───────────────────────────────────────────────────────────────
-
-const VIEW_TABS: { view: KnowledgeView; icon: React.ComponentType<{ className?: string }>; label: string }[] = [
-  { view: 'wiki',     icon: BookOpen,   label: 'Wiki' },
-  { view: 'graph',    icon: Network,    label: 'Graph' },
-  { view: 'books',    icon: BookMarked, label: 'Books' },
-  { view: 'canvas',   icon: Layout,     label: 'Canvas' },
-  { view: 'settings', icon: Settings,   label: 'Settings' },
-]
 
 const MAX_SUBSECTION_ITEMS = 30
 
@@ -227,26 +218,10 @@ export function KnowledgeListPanel({ currentView, onViewChange, onArticleSelect 
   return (
     <div className="flex flex-col h-full overflow-hidden">
 
-      {/* ── View tabs (labeled, titlebar-no-drag to avoid macOS window-drag area) ── */}
-      <div className="titlebar-no-drag flex items-center gap-0.5 px-2 pt-2 pb-1.5 flex-shrink-0 border-b border-border/40 overflow-x-auto scrollbar-none">
-        {VIEW_TABS.map(({ view, icon: Icon, label }) => (
-          <button
-            key={view}
-            onClick={() => onViewChange(view)}
-            className={`titlebar-no-drag flex items-center gap-1.5 px-2.5 h-7 rounded-md text-xs font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
-              currentView === view
-                ? 'bg-accent text-accent-foreground'
-                : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
-            }`}
-          >
-            <Icon className="h-3.5 w-3.5 flex-shrink-0" />
-            {label}
-          </button>
-        ))}
-        <div className="flex-1 min-w-2" />
-        {/* Status indicator */}
+      {/* ── Status dot (engine health, compact) ── */}
+      <div className="flex items-center justify-end px-3 pt-1.5 pb-0 flex-shrink-0">
         <div
-          className={`w-1.5 h-1.5 rounded-full mr-1 flex-shrink-0 ${
+          className={`w-1.5 h-1.5 rounded-full ${
             kbStatus.status === 'ready'   ? 'bg-green-500' :
             kbStatus.status === 'loading' ? 'bg-amber-500 animate-pulse' :
             kbStatus.status === 'error'   ? 'bg-red-500' : 'bg-muted-foreground/40'
