@@ -1415,14 +1415,14 @@ This is a branched conversation. All prior messages in this conversation are par
         debug(`[chat] Detected SDK slash command: ${trimmedMessage}`);
         this.currentQuery = query({ prompt: trimmedMessage, options: optionsWithAbort });
       } else if (hasBinaryAttachments) {
-        const sdkMessage = this.buildSDKUserMessage(effectiveUserMessage, attachments);
+        const sdkMessage = await this.buildSDKUserMessage(effectiveUserMessage, attachments);
         async function* singleMessage(): AsyncIterable<SDKUserMessage> {
           yield sdkMessage;
         }
         this.currentQuery = query({ prompt: singleMessage(), options: optionsWithAbort });
       } else {
         // Simple string prompt for text-only messages (may include text file contents)
-        const prompt = this.buildTextPrompt(effectiveUserMessage, attachments);
+        const prompt = await this.buildTextPrompt(effectiveUserMessage, attachments);
         this.currentQuery = query({ prompt, options: optionsWithAbort });
       }
 
@@ -2147,7 +2147,7 @@ This is a branched conversation. All prior messages in this conversation are par
    * Prepends date/time context for prompt caching optimization (keeps system prompt static)
    * Injects session state (including mode state) for every message
    */
-  private buildTextPrompt(text: string, attachments?: FileAttachment[]): string {
+  private async buildTextPrompt(text: string, attachments?: FileAttachment[]): Promise<string> {
     const parts: string[] = [];
 
     // Add context parts using centralized PromptBuilder
@@ -2162,6 +2162,8 @@ This is a branched conversation. All prior messages in this conversation are par
       { plansFolderPath: getSessionPlansPath(this.workspaceRootPath, this.modeSessionId) },
       this.sourceManager.formatSourceState()
     );
+    const kbContext = await this.promptBuilder.buildKnowledgeContext(text);
+    if (kbContext) contextParts.push(kbContext);
 
     parts.push(...contextParts);
 
@@ -2193,7 +2195,7 @@ This is a branched conversation. All prior messages in this conversation are par
    * Prepends date/time context for prompt caching optimization (keeps system prompt static)
    * Injects session state (including mode state) for every message
    */
-  private buildSDKUserMessage(text: string, attachments?: FileAttachment[]): SDKUserMessage {
+  private async buildSDKUserMessage(text: string, attachments?: FileAttachment[]): Promise<SDKUserMessage> {
     const contentBlocks: ContentBlockParam[] = [];
 
     // Add context parts using centralized PromptBuilder
@@ -2208,6 +2210,8 @@ This is a branched conversation. All prior messages in this conversation are par
       { plansFolderPath: getSessionPlansPath(this.workspaceRootPath, this.modeSessionId) },
       this.sourceManager.formatSourceState()
     );
+    const kbContext = await this.promptBuilder.buildKnowledgeContext(text);
+    if (kbContext) contextParts.push(kbContext);
 
     for (const part of contextParts) {
       contentBlocks.push({ type: 'text', text: part });

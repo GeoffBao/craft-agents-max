@@ -157,6 +157,13 @@ export const routes = {
       return `skills/skill/${skillSlug}` as const
     },
 
+    /** Knowledge view (knowledge navigator). Pass a view and optional article path. */
+    knowledge: (view?: import('./types').KnowledgeView, relativePath?: string) => {
+      const v = view ?? 'wiki'
+      if (relativePath) return `knowledge/${v}/article/${encodeURIComponent(relativePath)}` as const
+      return `knowledge/${v}` as const
+    },
+
     /** Automations view (automations navigator) - supports type filtering */
     automations: (params?: { automationId?: string; type?: 'scheduled' | 'event' | 'agentic' }) => {
       const { automationId, type } = params ?? {}

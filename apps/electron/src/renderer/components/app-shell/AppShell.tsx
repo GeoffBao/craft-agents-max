@@ -20,6 +20,7 @@ import {
   Trash2,
   DatabaseZap,
   Zap,
+  BookOpen,
   Inbox,
   Globe,
   FolderOpen,
@@ -113,8 +114,12 @@ import {
   isSettingsNavigation,
   isSkillsNavigation,
   isAutomationsNavigation,
+  isKnowledgeNavigation,
   type NavigationState,
 } from "@/contexts/NavigationContext"
+import { KnowledgeListPanel } from "@/components/knowledge/KnowledgeListPanel"
+import { KnowledgeContentPanel } from "@/components/knowledge/KnowledgeContentPanel"
+import type { KnowledgeView } from "../../../shared/types"
 import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
@@ -1699,6 +1704,11 @@ function AppShellContent({
     navigate(routes.view.skills())
   }, [])
 
+  // Handler for knowledge view
+  const handleKnowledgeClick = useCallback(() => {
+    navigate(routes.view.knowledge())
+  }, [])
+
   // Handlers for automations view
   const handleAutomationsClick = useCallback(() => {
     navigate(routes.view.automations())
@@ -2079,6 +2089,11 @@ function AppShellContent({
       return t("sidebar.sources")
     }
 
+    // Knowledge navigator
+    if (isKnowledgeNavigation(navState)) {
+      return t("sidebar.allKnowledge")
+    }
+
     // Skills navigator
     if (isSkillsNavigation(navState)) {
       return t("sidebar.allSkills")
@@ -2423,6 +2438,13 @@ function AppShellContent({
                         type: 'skills',
                         onAddSkill: openAddSkill,
                       },
+                    },
+                    {
+                      id: "nav:knowledge",
+                      title: t("sidebar.knowledge"),
+                      icon: BookOpen,
+                      variant: isKnowledgeNavigation(navState) ? "default" : "ghost",
+                      onClick: handleKnowledgeClick,
                     },
                     {
                       id: "nav:automations",
@@ -3163,6 +3185,14 @@ function AppShellContent({
                 onSourceClick={handleSourceSelect}
                 selectedSourceSlug={isSourcesNavigation(navState) && navState.details ? navState.details.sourceSlug : null}
                 localMcpEnabled={localMcpEnabled}
+              />
+            )}
+            {isKnowledgeNavigation(navState) && (
+              /* Knowledge navigator list panel */
+              <KnowledgeListPanel
+                currentView={isKnowledgeNavigation(navState) ? navState.view : 'wiki'}
+                onViewChange={(view: KnowledgeView) => navigate(routes.view.knowledge(view))}
+                onArticleSelect={(path: string) => navigate(routes.view.knowledge('wiki', path))}
               />
             )}
             {isSkillsNavigation(navState) && activeWorkspaceId && (

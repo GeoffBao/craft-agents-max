@@ -26,11 +26,13 @@ import { sessionMetaMapAtom, type SessionMeta } from '@/atoms/sessions'
 import { StoplightProvider } from '@/context/StoplightContext'
 import {
   useNavigationState,
+  useNavigation,
   isSessionsNavigation,
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
   isAutomationsNavigation,
+  isKnowledgeNavigation,
 } from '@/contexts/NavigationContext'
 import { useSessionSelection, useIsMultiSelectActive, useSelectedIds, useSelectionCount } from '@/hooks/useSession'
 import { sourceSelection, skillSelection, automationSelection } from '@/hooks/useEntitySelection'
@@ -43,6 +45,8 @@ import { AutomationInfoPage } from '../automations/AutomationInfoPage'
 import type { ExecutionEntry } from '../automations/types'
 import { automationsAtom } from '@/atoms/automations'
 import { SendResourceToWorkspaceDialog, type SendResourceType } from './SendResourceToWorkspaceDialog'
+import { KnowledgeContentPanel } from '@/components/knowledge/KnowledgeContentPanel'
+import { routes } from '@/contexts/NavigationContext'
 
 export interface MainContentPanelProps {
   /** Whether both sidebar and navigator are hidden (focus mode / CMD+.) */
@@ -64,6 +68,7 @@ export function MainContentPanel({
 }: MainContentPanelProps) {
   const { t } = useTranslation()
   const globalNavState = useNavigationState()
+  const { navigate } = useNavigation()
   const navState = navStateOverride ?? globalNavState
   const {
     activeWorkspaceId,
@@ -274,6 +279,21 @@ export function MainContentPanel({
         <div className="flex items-center justify-center h-full text-muted-foreground">
           <p className="text-sm">{t("sourcesList.noSourcesConfigured")}</p>
         </div>
+      </Panel>
+    )
+  }
+
+  // Knowledge navigator - show article viewer, journey, or stub views
+  if (isKnowledgeNavigation(navState)) {
+    const articlePath = navState.details?.type === 'article' ? navState.details.relativePath : null
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <KnowledgeContentPanel
+          view={navState.view}
+          selectedArticlePath={articlePath}
+          onArticleNavigate={(path) => navigate(routes.view.knowledge('wiki', path))}
+          onArticleBack={() => navigate(routes.view.knowledge('wiki'))}
+        />
       </Panel>
     )
   }

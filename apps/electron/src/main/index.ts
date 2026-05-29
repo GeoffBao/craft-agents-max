@@ -119,6 +119,7 @@ import { initNotificationService, initBadgeIcon, initInstanceBadge, updateBadgeC
 import { checkForUpdatesOnLaunch, setAutoUpdateEventSink, isUpdating, setBeforeUpdateQuitHook } from './auto-update'
 import type { EventSink } from '@craft-agent/server-core/transport'
 import { validateGitBashPath, checkVCRedistInstalled } from '@craft-agent/server-core/services'
+import { initKnowledgeBaseEngine, disposeKnowledgeBaseEngine } from './knowledge-bootstrap'
 
 // Initialize electron-log for renderer process support
 log.initialize()
@@ -763,6 +764,9 @@ app.whenReady().then(async () => {
         mainLog.error('[messaging] Gateway initialization failed:', err)
       }
 
+      // Knowledge base engine — background index; handlers return empty until ready
+      void initKnowledgeBaseEngine()
+
       // IPC handlers — preload uses sendSync to get WS connection details
 
       // Remove workspace from config (cleanup stale entries)
@@ -1229,6 +1233,8 @@ app.on('before-quit', async (event) => {
         mainLog.error('[messaging] dispose failed:', err)
       }
     }
+
+    await disposeKnowledgeBaseEngine()
 
     // Clean up power manager (release power blocker)
     const { cleanup: cleanupPowerManager } = await import('./power-manager')

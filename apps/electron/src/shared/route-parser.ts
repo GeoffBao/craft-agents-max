@@ -35,7 +35,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'automations' | 'settings'
+export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'automations' | 'settings' | 'knowledge'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -61,7 +61,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 const COMPOUND_ROUTE_PREFIXES = [
-  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'automations', 'settings'
+  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'automations', 'settings', 'knowledge'
 ]
 
 /**
@@ -159,6 +159,17 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
     }
 
     return null
+  }
+
+  // Knowledge navigator
+  if (first === 'knowledge') {
+    const view = segments[1] ?? 'wiki'
+    const validViews = ['wiki', 'journey', 'graph', 'books', 'canvas']
+    const safeView = validViews.includes(view) ? view : 'wiki'
+    if (segments[2] === 'article' && segments[3]) {
+      return { navigator: 'knowledge', details: { type: 'article', id: decodeURIComponent(segments[3]) } }
+    }
+    return { navigator: 'knowledge', details: null }
   }
 
   // Automations navigator - supports type filters (scheduled, event, agentic)
@@ -277,6 +288,11 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
   if (parsed.navigator === 'skills') {
     if (!parsed.details) return 'skills'
     return `skills/skill/${parsed.details.id}`
+  }
+
+  if (parsed.navigator === 'knowledge') {
+    if (!parsed.details) return 'knowledge'
+    return `knowledge/wiki/article/${encodeURIComponent(parsed.details.id)}`
   }
 
   if (parsed.navigator === 'automations') {
@@ -402,6 +418,14 @@ function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute 
       return { type: 'view', name: 'skills', params: {} }
     }
     return { type: 'view', name: 'skill-info', id: compound.details.id, params: {} }
+  }
+
+  // Knowledge
+  if (compound.navigator === 'knowledge') {
+    if (!compound.details) {
+      return { type: 'view', name: 'knowledge', params: {} }
+    }
+    return { type: 'view', name: 'knowledge-article', id: compound.details.id, params: {} }
   }
 
   // Automations
@@ -531,6 +555,18 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
     }
   }
 
+  // Knowledge
+  if (compound.navigator === 'knowledge') {
+    if (!compound.details) {
+      return { navigator: 'knowledge', view: 'wiki', details: null }
+    }
+    return {
+      navigator: 'knowledge',
+      view: 'wiki',
+      details: { type: 'article', relativePath: compound.details.id },
+    }
+  }
+
   // Automations - include filter if present
   if (compound.navigator === 'automations') {
     if (!compound.details) {
@@ -611,6 +647,17 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
         }
       }
       return { navigator: 'skills', details: null }
+    case 'knowledge':
+      return { navigator: 'knowledge', view: 'wiki', details: null }
+    case 'knowledge-article':
+      if (parsed.id) {
+        return {
+          navigator: 'knowledge',
+          view: 'wiki',
+          details: { type: 'article', relativePath: parsed.id },
+        }
+      }
+      return { navigator: 'knowledge', view: 'wiki', details: null }
     case 'automations':
       return { navigator: 'automations', details: null }
     case 'automation-info':
@@ -721,6 +768,13 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
     return {
       navigator: 'skills',
       details: state.details?.type === 'skill' ? { type: 'skill', id: state.details.skillSlug } : null,
+    }
+  }
+
+  if (state.navigator === 'knowledge') {
+    return {
+      navigator: 'knowledge',
+      details: state.details?.type === 'article' ? { type: 'article', id: state.details.relativePath } : null,
     }
   }
 

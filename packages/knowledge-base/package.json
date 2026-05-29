@@ -1,0 +1,30 @@
+{
+  "name": "@craft-agent/knowledge-base",
+  "version": "0.10.0",
+  "license": "Apache-2.0",
+  "description": "Obsidian vault knowledge base engine for craft-agents",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test:index": "bun run src/scripts/test-index.ts"
+  },
+  "dependencies": {
+    "@craft-agent/session-tools-core": "workspace:*",
+    "gray-matter": "^4.0.3",
+    "minisearch": "^7.1.0",
+    "chokidar": "^3.6.0",
+    "zod": "^3.23.0"
+  },
+  "optionalDependencies": {
+    "@xenova/transformers": "^2.17.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2",
+    "@types/node": "^22.0.0"
+  }
+}

@@ -237,3 +237,19 @@ export type {
   SessionToolFilterOptions,
   SessionToolNameOptions,
 } from './tool-defs.ts';
+
+// also export registerExternalTools from tool-defs
+export { registerExternalTools } from './tool-defs.ts';
+
+// Plugin lifecycle registries (context providers + turn-complete handlers)
+export {
+  registerContextProvider,
+  getContextProviders,
+  registerTurnCompleteHandler,
+  getTurnCompleteHandlers,
+} from './context-registry.ts';
+export type {
+  KnowledgeContextProvider,
+  TurnCompletePayload,
+  TurnCompleteHandler,
+} from './context-registry.ts';

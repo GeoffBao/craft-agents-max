@@ -30,6 +30,7 @@ import {
   // Types
   type ToolResult,
   type AuthRequest,
+  type SessionToolHandler,
 } from '@craft-agent/session-tools-core';
 import { createLLMTool, type LLMQueryRequest, type LLMQueryResult } from './llm-tool.ts';
 import { createSpawnSessionTool, type SpawnSessionFn } from './spawn-session-tool.ts';
@@ -244,14 +245,16 @@ export function getSessionScopedTools(
     // Attach session self-management bindings (lazy getters from callback registry)
     attachSessionSelfManagementBindings(ctx, sessionId);
 
-    // Helper to create a tool from the canonical registry.
+    // Helper to create a Claude SDK tool from a session tool def.
+    // Accepts the def directly to support both built-in and externally-registered tools.
     // The `as any` on schema bridges a Zod generic-variance issue when .shape
     // types (ZodType<string>) flow into Record<string, ZodType<unknown>>.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    function registryTool(name: string, schema: any) {
-      const def = SESSION_TOOL_REGISTRY.get(name)!;
-      return tool(name, TOOL_DESCRIPTIONS[name] || def.description, schema, async (args: any) => {
-        const result = await def.handler!(ctx, args);
+    function registryTool(def: { name: string; description: string; inputSchema: { shape: any }; handler: SessionToolHandler; readOnly?: boolean }) {
+      // TOOL_DESCRIPTIONS may augment built-in descriptions with DOC_REFS; fall back to def.description
+      const description = (TOOL_DESCRIPTIONS as Record<string, string | undefined>)[def.name] ?? def.description;
+      return tool(def.name, description, def.inputSchema.shape, async (args: any) => {
+        const result = await def.handler(ctx, args);
         return convertResult(result);
       }, def.readOnly ? { annotations: { readOnlyHint: true } } : undefined);
     }
@@ -260,10 +263,11 @@ export function getSessionScopedTools(
     assertClaudeBackendSessionToolParity();
 
     // Create tools from the canonical registry — all tools with handlers.
+    // Includes externally-registered tools (e.g. knowledge-base) via getSessionToolDefs().
     // Tool visibility is centrally filtered in session-tools-core to avoid backend drift.
     tools = getSessionToolDefs({ includeDeveloperFeedback: FEATURE_FLAGS.developerFeedback })
       .filter(def => def.handler !== null) // Skip backend-specific tools (call_llm)
-      .map(def => registryTool(def.name, def.inputSchema.shape));
+      .map(def => registryTool(def as Parameters<typeof registryTool>[0]));
 
     // Add call_llm — backend-specific (not in registry handler)
     const sessionPath = getSessionPath(workspaceRootPath, sessionId);

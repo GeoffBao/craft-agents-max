@@ -17,6 +17,8 @@ import { formatPreferencesForPrompt } from '../../config/preferences.ts';
 import { formatSessionState } from '../mode-manager.ts';
 import { getDateTimeContext, getWorkingDirectoryContext } from '../../prompts/system.ts';
 import { getSessionPlansPath, getSessionDataPath, getSessionPath } from '../../sessions/storage.ts';
+import { getContextProviders } from '@craft-agent/session-tools-core';
+
 import type {
   PromptBuilderConfig,
   ContextBlockOptions,
@@ -99,6 +101,23 @@ export class PromptBuilder {
     }
 
     return parts;
+  }
+
+  /**
+   * Retrieve knowledge-base context for the given user query.
+   * Returns a formatted <knowledge_base> block, or null if no providers are registered
+   * or no relevant chunks are found above threshold.
+   */
+  async buildKnowledgeContext(userQuery: string): Promise<string | null> {
+    const providers = getContextProviders();
+    if (providers.length === 0 || !userQuery.trim()) return null;
+    for (const provider of providers) {
+      try {
+        const ctx = await provider(userQuery);
+        if (ctx) return ctx;
+      } catch { /* provider failure should never break the agent turn */ }
+    }
+    return null;
   }
 
   /**
