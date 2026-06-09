@@ -10,6 +10,7 @@ export interface AgentLearningWorkspaceConfig {
   promptIntelligence?: boolean;
   contextCompression?: boolean;
   learningNudge?: boolean;
+  backgroundReview?: boolean;
   compactionMemoryFlush?: boolean;
   heartbeat?: boolean;
   observability?: boolean;
@@ -25,6 +26,7 @@ export function defaultAgentLearningWorkspaceConfig(): AgentLearningWorkspaceCon
     promptIntelligence: true,
     contextCompression: true,
     learningNudge: true,
+    backgroundReview: true,
     compactionMemoryFlush: true,
     heartbeat: false,
     observability: true,
@@ -43,6 +45,7 @@ export function normalizeAgentLearningWorkspaceConfig(
     promptIntelligence: block?.promptIntelligence ?? defaults.promptIntelligence,
     contextCompression: block?.contextCompression ?? defaults.contextCompression,
     learningNudge: block?.learningNudge ?? defaults.learningNudge,
+    backgroundReview: block?.backgroundReview ?? defaults.backgroundReview,
     compactionMemoryFlush: block?.compactionMemoryFlush ?? defaults.compactionMemoryFlush,
     heartbeat: block?.heartbeat ?? defaults.heartbeat,
     observability: block?.observability ?? defaults.observability,

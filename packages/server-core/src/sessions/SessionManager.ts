@@ -90,6 +90,7 @@ import {
   createSessionSearchFn,
   emitSessionEndLearningSignals,
   evaluatePreCompactLearningInfoMessage,
+  evaluateSessionEndLearningInfoMessage,
   indexSessionForRecall,
 } from '../memory/agent-learning-hooks.ts'
 import { logAgentLearningEvent } from '../memory/observability.ts'
@@ -4212,13 +4213,60 @@ export class SessionManager implements ISessionManager {
         sessionSearchFn: createSessionSearchFn(managed.workspace.rootPath),
         getConversationMessagesFn: async () => {
           return managed.messages
-            .filter(m => m.role === 'user' || m.role === 'assistant')
+            .filter(m =>
+              !m.isIntermediate &&
+              (m.role === 'user' || m.role === 'assistant' || m.role === 'tool'),
+            )
             .map(m => ({
-              role: m.role as 'user' | 'assistant',
+              role: m.role as 'user' | 'assistant' | 'tool',
               content: m.content,
               toolName: m.toolName,
               isIntermediate: m.isIntermediate,
             }))
+        },
+        applyContextCompressionFn: async (opts) => {
+          const { shouldCompress, trimOldToolResults } = await import('@craft-agent/shared/agent/context-compression')
+          const compressionMessages = managed.messages
+            .filter(m => !m.isIntermediate)
+            .map(m => ({
+              role: m.role as 'user' | 'assistant' | 'tool',
+              content: m.content,
+              toolName: m.toolName,
+              isIntermediate: m.isIntermediate,
+            }))
+          const plan = shouldCompress(compressionMessages, opts.tokenThreshold)
+          if (!plan.shouldCompress) {
+            return { ok: false, message: plan.reason }
+          }
+          const trimmed = trimOldToolResults(compressionMessages)
+          let trimmedCount = 0
+          let idx = 0
+          for (const m of managed.messages) {
+            if (m.isIntermediate) continue
+            if (m.role !== 'user' && m.role !== 'assistant' && m.role !== 'tool') continue
+            const next = trimmed[idx++]
+            if (next && m.content !== next.content) {
+              m.content = next.content
+              trimmedCount++
+            }
+          }
+          this.persistSession(managed)
+          return {
+            ok: true,
+            message: trimmedCount > 0
+              ? `Trimmed ${trimmedCount} oversized tool result(s) in session context.`
+              : 'No tool results exceeded trim threshold.',
+            trimmedCount,
+          }
+        },
+        onAgentLearningEventFn: (event) => {
+          const cfg = resolveAgentLearningConfig(managed.workspace.rootPath)
+          if (!cfg.observability) return
+          logAgentLearningEvent({
+            type: event.type as import('../memory/observability.ts').ObservabilityEventType,
+            sessionId: event.sessionId ?? managed.id,
+            payload: event.payload,
+          })
         },
         onSkillDraftProposedFn: (draft) => {
           const cfg = resolveAgentLearningConfig(managed.workspace.rootPath)
@@ -4408,6 +4456,27 @@ export class SessionManager implements ISessionManager {
   async archiveSession(sessionId: string): Promise<void> {
     const managed = this.sessions.get(sessionId)
     if (managed) {
+      const sessionEndNudge = evaluateSessionEndLearningInfoMessage(
+        managed.workspace.rootPath,
+        sessionId,
+        managed.messages.map(m => ({
+          role: m.role,
+          content: m.content,
+          isIntermediate: m.isIntermediate,
+        })),
+      )
+      if (sessionEndNudge) {
+        this.appendLearningInfoMessage(managed, sessionEndNudge)
+      }
+      emitSessionEndLearningSignals(
+        managed.workspace.rootPath,
+        sessionId,
+        managed.messages.map(m => ({
+          role: m.role,
+          content: m.content,
+          isIntermediate: m.isIntermediate,
+        })),
+      )
       managed.isArchived = true
       managed.archivedAt = Date.now()
       // Persist in-memory state directly to avoid race with pending queue writes
@@ -5435,15 +5504,22 @@ export class SessionManager implements ISessionManager {
     // Cancel any pending persistence write (session is being deleted, no need to save)
     sessionPersistenceQueue.cancel(sessionId)
 
-    emitSessionEndLearningSignals(
+    const sessionEndMessages = managed.messages.map(m => ({
+      role: m.role,
+      content: m.content,
+      isIntermediate: m.isIntermediate,
+    }))
+    const sessionEndNudge = evaluateSessionEndLearningInfoMessage(
       workspaceRootPath,
       sessionId,
-      managed.messages.map(m => ({
-        role: m.role,
-        content: m.content,
-        isIntermediate: m.isIntermediate,
-      })),
+      sessionEndMessages,
     )
+    if (sessionEndNudge) {
+      this.appendLearningInfoMessage(managed, sessionEndNudge)
+      await this.flushSession(sessionId)
+    }
+
+    emitSessionEndLearningSignals(workspaceRootPath, sessionId, sessionEndMessages)
 
     // Clean up session-scoped tool callbacks to prevent memory accumulation
     unregisterSessionScopedToolCallbacks(sessionId)

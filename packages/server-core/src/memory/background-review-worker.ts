@@ -33,7 +33,7 @@ export async function runBackgroundReviewInWorker(
 ): Promise<BackgroundReviewSuggestion | null> {
   const workspaceRootPath = params.workspace.rootPath;
   const cfg = resolveAgentLearningConfig(workspaceRootPath);
-  if (!cfg.enabled || !cfg.learningNudge) return null;
+  if (!cfg.enabled || !cfg.backgroundReview) return null;
 
   const wsConfig = loadWorkspaceConfig(workspaceRootPath);
   const defaultModel = wsConfig?.defaults?.model;

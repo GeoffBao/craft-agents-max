@@ -75,6 +75,8 @@ export type { ListSessionsArgs } from './list-sessions.ts';
 
 // Agent Learning
 export { handleMemory } from './memory.ts';
+export { handleMemorySearch } from './memory-search.ts';
+export type { MemorySearchArgs } from './memory-search.ts';
 export type { MemoryArgs, MemoryAction, MemoryTarget, MemoryOperationResult } from './memory.ts';
 export { handleSessionSearch } from './session-search.ts';
 export type { SessionSearchArgs, SessionSearchHit, SessionSearchResult } from './session-search.ts';

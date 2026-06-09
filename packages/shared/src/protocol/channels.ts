@@ -258,6 +258,9 @@ export const RPC_CHANNELS = {
   },
   skills: {
     GET: 'skills:get',
+    GET_DRAFTS: 'skills:getDrafts',
+    PROMOTE_DRAFT: 'skills:promoteDraft',
+    REJECT_DRAFT: 'skills:rejectDraft',
     GET_FILES: 'skills:getFiles',
     DELETE: 'skills:delete',
     OPEN_EDITOR: 'skills:openEditor',

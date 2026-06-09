@@ -25,7 +25,7 @@ const MEMORY_GUIDANCE = `## Memory discipline
 
 const SESSION_SEARCH_GUIDANCE = `## Cross-session recall
 - When the user references prior work ("last time", "we fixed", "earlier session"), search before answering.
-- Use \`session_search\` with a specific query; read returned snippets and surrounding context.
+- Use \`memory_search\` to grep MEMORY.md for stored long-term facts; use \`session_search\` for full chat history across sessions.
 - Cite which session or timeframe your answer comes from when it matters.`;
 
 const SKILL_GUIDANCE = `## Skill reuse and creation
@@ -36,7 +36,7 @@ const SKILL_GUIDANCE = `## Skill reuse and creation
 - Propose skills after successful debugging, CI/packaging flows, or when the user corrects the same preference twice.`;
 
 const COMPRESS_GUIDANCE = `## Context compression
-- When the conversation is long or tool output is heavy, call \`compress_context\` to assess whether compression is warranted.
+- When the conversation is long or tool output is heavy, call \`compress_context\` (dryRun=true to analyze; dryRun=false to trim old tool results).
 - Before compaction, persist durable facts with \`memory\` if they would be lost.`;
 
 /**
@@ -80,7 +80,7 @@ export function buildIntelligenceGuidance(options: IntelligenceGuidanceOptions):
   if (options.availableTools.has('memory')) {
     sections.push(MEMORY_GUIDANCE);
   }
-  if (options.availableTools.has('session_search')) {
+  if (options.availableTools.has('memory_search') || options.availableTools.has('session_search')) {
     sections.push(SESSION_SEARCH_GUIDANCE);
   }
   if (

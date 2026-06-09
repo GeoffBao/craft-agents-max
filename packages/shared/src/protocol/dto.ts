@@ -506,6 +506,7 @@ export interface AgentLearningWorkspaceSettings {
   promptIntelligence?: boolean
   contextCompression?: boolean
   learningNudge?: boolean
+  backgroundReview?: boolean
   compactionMemoryFlush?: boolean
   heartbeat?: boolean
   observability?: boolean

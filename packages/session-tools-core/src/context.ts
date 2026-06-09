@@ -400,6 +400,12 @@ export interface SessionToolContext {
     key?: string;
   }): Promise<{ ok: boolean; message: string }> | { ok: boolean; message: string };
 
+  /** Search MEMORY.md (injected via agent-learning bindings). */
+  searchMemoryMd?(options: {
+    query: string;
+    limit?: number;
+  }): Promise<import('@craft-agent/shared/memory').MemorySearchResult>;
+
   /** Search indexed session history (injected via SessionManager callback). */
   sessionSearch?(options: {
     query: string;

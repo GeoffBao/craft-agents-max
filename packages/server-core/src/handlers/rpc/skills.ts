@@ -7,6 +7,9 @@ import type { HandlerDeps } from '../handler-deps'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.skills.GET,
+  RPC_CHANNELS.skills.GET_DRAFTS,
+  RPC_CHANNELS.skills.PROMOTE_DRAFT,
+  RPC_CHANNELS.skills.REJECT_DRAFT,
   RPC_CHANNELS.skills.GET_FILES,
   RPC_CHANNELS.skills.DELETE,
   RPC_CHANNELS.skills.OPEN_EDITOR,
@@ -31,6 +34,31 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     const skills = loadAllSkills(workspace.rootPath, effectiveWorkingDir)
     deps.platform.logger?.info(`SKILLS_GET: Loaded ${skills.length} skills from ${workspace.rootPath}`)
     return skills
+  })
+
+  server.handle(RPC_CHANNELS.skills.GET_DRAFTS, async (_ctx, workspaceId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) return []
+    const { listSkillDrafts } = await import('@craft-agent/shared/skills')
+    return listSkillDrafts(workspace.rootPath)
+  })
+
+  server.handle(RPC_CHANNELS.skills.PROMOTE_DRAFT, async (_ctx, workspaceId: string, slug: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+    const { promoteSkillDraft } = await import('@craft-agent/shared/skills')
+    const result = promoteSkillDraft(workspace.rootPath, slug)
+    if (!result.ok) throw new Error(result.message)
+    return result
+  })
+
+  server.handle(RPC_CHANNELS.skills.REJECT_DRAFT, async (_ctx, workspaceId: string, slug: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+    const { rejectSkillDraft } = await import('@craft-agent/shared/skills')
+    const result = rejectSkillDraft(workspace.rootPath, slug)
+    if (!result.ok) throw new Error(result.message)
+    return result
   })
 
   // Get files in a skill directory

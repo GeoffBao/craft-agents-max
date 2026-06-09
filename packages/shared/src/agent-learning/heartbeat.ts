@@ -4,8 +4,8 @@
  * Read-only checklist consumed by SchedulerTick automations.
  */
 
-import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { dirname, join } from 'path';
 
 export const HEARTBEAT_FILENAME = 'HEARTBEAT.md';
 
@@ -17,6 +17,17 @@ export function loadHeartbeatChecklist(workspaceRootPath: string): string | null
   const path = getHeartbeatPath(workspaceRootPath);
   if (!existsSync(path)) return null;
   return readFileSync(path, 'utf-8');
+}
+
+/** Seed .craft/HEARTBEAT.md when heartbeat is enabled and file is missing. */
+export function ensureHeartbeatChecklist(workspaceRootPath: string): void {
+  const path = getHeartbeatPath(workspaceRootPath);
+  if (existsSync(path)) return;
+  const dir = dirname(path);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+  writeFileSync(path, DEFAULT_HEARTBEAT_TEMPLATE, 'utf-8');
 }
 
 export const DEFAULT_HEARTBEAT_TEMPLATE = `# Heartbeat Checklist

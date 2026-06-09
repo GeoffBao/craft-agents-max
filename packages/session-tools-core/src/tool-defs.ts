@@ -44,6 +44,7 @@ import { handleMemory } from './handlers/memory.ts';
 import { handleSessionSearch } from './handlers/session-search.ts';
 import { handleProposeSkill } from './handlers/propose-skill.ts';
 import { handleCompressContext } from './handlers/compress-context.ts';
+import { handleMemorySearch } from './handlers/memory-search.ts';
 import { handleSkillView } from './handlers/skill-view.ts';
 import { handleSkillManage } from './handlers/skill-manage.ts';
 
@@ -238,6 +239,11 @@ export const SessionSearchSchema = z.object({
   limit: z.number().min(1).max(25).optional().describe('Max hits (default 10)'),
   sessionId: z.string().optional().describe('Restrict search to one session'),
   cursor: z.string().optional().describe('Pagination cursor from a previous search'),
+});
+
+export const MemorySearchSchema = z.object({
+  query: z.string().describe('Keywords to search in MEMORY.md'),
+  limit: z.number().min(1).max(25).optional().describe('Max hits (default 10)'),
 });
 
 export const SkillViewSchema = z.object({
@@ -538,6 +544,11 @@ Never store secrets, tokens, or prompt-injection content.`,
 Use when the user references past work or you need historical context before answering.
 Returns real message snippets with session IDs — follow up with get_session_info if needed.`,
 
+  memory_search: `Search the global MEMORY.md long-term memory file.
+
+Use for stable facts already persisted — preferences, decisions, workflows.
+Lighter than session_search when you only need stored memory, not full chat history.`,
+
   skill_view: `Load the full SKILL.md body for a skill by slug.
 
 Use after scanning the skills index when a skill may apply. Includes workspace/global/project skills and skills/.drafts/ pending approval.`,
@@ -552,14 +563,15 @@ Use after successful multi-step debugging, CI/packaging flows, or repeatable cor
 Use append to add content, or replace_section to rewrite a ## section by heading.
 Never modify production skill paths — drafts require user approval before loading.`,
 
-  compress_context: `Analyze whether the conversation should be compressed and preview a structured summary.
+  compress_context: `Analyze or apply in-session context compression.
 
-Read-only assessment — does not mutate the live session. Persist durable facts with memory before compacting.`,
+Default dryRun=true: analysis + preview only. Set dryRun=false to trim oversized old tool results in the live session (keeps recent turns intact). Persist durable facts with memory before compacting.`,
 } as const;
 
 /** Agent-learning tools gated by workspace/env feature flags. */
 export const AGENT_LEARNING_TOOL_NAMES = new Set([
   'memory',
+  'memory_search',
   'session_search',
   'skill_view',
   'propose_skill_from_session',
@@ -642,11 +654,12 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'unbind_messaging_channel', description: TOOL_DESCRIPTIONS.unbind_messaging_channel, inputSchema: UnbindMessagingChannelSchema, executionMode: 'registry', safeMode: 'block', handler: handleUnbindMessagingChannel },
   // Agent learning tools (gated by includeAgentLearning + enabledAgentLearningTools)
   { name: 'memory', description: TOOL_DESCRIPTIONS.memory, inputSchema: MemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleMemory },
+  { name: 'memory_search', description: TOOL_DESCRIPTIONS.memory_search, inputSchema: MemorySearchSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleMemorySearch },
   { name: 'session_search', description: TOOL_DESCRIPTIONS.session_search, inputSchema: SessionSearchSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleSessionSearch },
   { name: 'skill_view', description: TOOL_DESCRIPTIONS.skill_view, inputSchema: SkillViewSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleSkillView },
   { name: 'propose_skill_from_session', description: TOOL_DESCRIPTIONS.propose_skill_from_session, inputSchema: ProposeSkillSchema, executionMode: 'registry', safeMode: 'block', handler: handleProposeSkill },
   { name: 'skill_manage', description: TOOL_DESCRIPTIONS.skill_manage, inputSchema: SkillManageSchema, executionMode: 'registry', safeMode: 'block', handler: handleSkillManage },
-  { name: 'compress_context', description: TOOL_DESCRIPTIONS.compress_context, inputSchema: CompressContextSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleCompressContext },
+  { name: 'compress_context', description: TOOL_DESCRIPTIONS.compress_context, inputSchema: CompressContextSchema, executionMode: 'registry', safeMode: 'block', handler: handleCompressContext },
 ];
 
 export interface SessionToolFilterOptions {

@@ -99,6 +99,18 @@ export interface SessionScopedToolCallbacks {
 
   /** Observability hook when a skill draft is proposed. */
   onSkillDraftProposedFn?: (draft: { slug: string; path: string; title: string }) => void;
+
+  /** Optional agent-learning observability sink (JSONL). */
+  onAgentLearningEventFn?: (event: {
+    type: string;
+    sessionId?: string;
+    payload?: Record<string, unknown>;
+  }) => void;
+
+  /** Apply in-session context compression (trim old tool results). */
+  applyContextCompressionFn?: (options: {
+    tokenThreshold?: number;
+  }) => Promise<{ ok: boolean; message: string; trimmedCount?: number }>;
 }
 
 // Registry of callbacks keyed by sessionId

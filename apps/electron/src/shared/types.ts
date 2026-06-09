@@ -474,6 +474,9 @@ export interface ElectronAPI {
 
   // Skills
   getSkills(workspaceId: string, workingDirectory?: string): Promise<LoadedSkill[]>
+  getSkillDrafts(workspaceId: string): Promise<import('@craft-agent/shared/skills').LoadedSkillDraft[]>
+  promoteSkillDraft(workspaceId: string, slug: string): Promise<{ ok: boolean; message: string }>
+  rejectSkillDraft(workspaceId: string, slug: string): Promise<{ ok: boolean; message: string }>
   getSkillFiles?(workspaceId: string, skillSlug: string): Promise<SkillFile[]>
   deleteSkill(workspaceId: string, skillSlug: string): Promise<void>
   openSkillInEditor(workspaceId: string, skillSlug: string): Promise<void>

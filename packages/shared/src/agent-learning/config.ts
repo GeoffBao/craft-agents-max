@@ -41,6 +41,7 @@ export interface AgentLearningConfig {
   promptIntelligence: boolean;
   contextCompression: boolean;
   learningNudge: boolean;
+  backgroundReview: boolean;
   compactionMemoryFlush: boolean;
   heartbeat: boolean;
   observability: boolean;
@@ -48,6 +49,7 @@ export interface AgentLearningConfig {
 
 export const AGENT_LEARNING_TOOL_NAMES = [
   'memory',
+  'memory_search',
   'session_search',
   'skill_view',
   'propose_skill_from_session',
@@ -65,6 +67,7 @@ const DEFAULT_CONFIG: AgentLearningConfig = {
   promptIntelligence: false,
   contextCompression: false,
   learningNudge: false,
+  backgroundReview: false,
   compactionMemoryFlush: false,
   heartbeat: false,
   observability: false,
@@ -105,6 +108,7 @@ export function resolveAgentLearningConfig(workspaceRootPath?: string): AgentLea
     promptIntelligence: flag('promptIntelligence'),
     contextCompression: flag('contextCompression'),
     learningNudge: flag('learningNudge'),
+    backgroundReview: flag('backgroundReview'),
     compactionMemoryFlush: flag('compactionMemoryFlush'),
     heartbeat: flag('heartbeat'),
     observability: flag('observability'),
@@ -114,7 +118,10 @@ export function resolveAgentLearningConfig(workspaceRootPath?: string): AgentLea
 export function getEnabledAgentLearningTools(config: AgentLearningConfig): Set<AgentLearningToolName> {
   const tools = new Set<AgentLearningToolName>();
   if (!config.enabled) return tools;
-  if (config.persistentMemory) tools.add('memory');
+  if (config.persistentMemory) {
+    tools.add('memory');
+    tools.add('memory_search');
+  }
   if (config.sessionRecall) tools.add('session_search');
   if (config.promptIntelligence || config.skillDrafts) tools.add('skill_view');
   if (config.skillDrafts) {

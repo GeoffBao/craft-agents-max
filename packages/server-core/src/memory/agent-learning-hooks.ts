@@ -8,6 +8,7 @@ import {
   formatLearningNudgeForLog,
   formatLearningNudgeCandidateInfoMessage,
   extractCompactionFactCandidates,
+  detectHadSuccessfulMultiStepFix,
 } from '@craft-agent/shared/agent-learning';
 import { getSessionIndexManager } from './session-indexer.ts';
 import { searchSessions } from './session-search.ts';
@@ -48,6 +49,7 @@ export function emitSessionEndLearningSignals(
       event: 'SessionEnd',
       messageCount: messages.length,
       userCorrectionCount: userMessages.filter(m => /no,|wrong|instead|prefer/i.test(m.content)).length,
+      hadSuccessfulMultiStepFix: detectHadSuccessfulMultiStepFix(messages),
     });
     if (nudge && cfg.observability) {
       logAgentLearningEvent({
@@ -90,6 +92,7 @@ export function evaluatePreCompactLearningInfoMessage(
       sessionId,
       event: 'PreCompact',
       messageCount: messages.length,
+      hadSuccessfulMultiStepFix: detectHadSuccessfulMultiStepFix(messages),
     });
     if (nudge) {
       infoMessage = formatLearningNudgeCandidateInfoMessage(nudge);
@@ -123,6 +126,39 @@ export function evaluatePreCompactLearningInfoMessage(
   }
 
   return infoMessage;
+}
+
+/**
+ * Session-end learning hint — same rules as PreCompact, for archive/delete UI surfacing.
+ */
+export function evaluateSessionEndLearningInfoMessage(
+  workspaceRootPath: string,
+  sessionId: string,
+  messages: Array<{ role: string; content: string; isIntermediate?: boolean }>,
+): string | null {
+  const cfg = resolveAgentLearningConfig(workspaceRootPath);
+  if (!cfg.enabled || !cfg.learningNudge) return null;
+
+  const userMessages = messages.filter(m => m.role === 'user' && !m.isIntermediate);
+  const nudge = evaluateLearningNudge({
+    sessionId,
+    event: 'SessionEnd',
+    messageCount: messages.length,
+    userCorrectionCount: userMessages.filter(m => /no,|wrong|instead|prefer/i.test(m.content)).length,
+    hadSuccessfulMultiStepFix: detectHadSuccessfulMultiStepFix(messages),
+  });
+  if (!nudge) return null;
+
+  if (cfg.observability) {
+    logAgentLearningEvent({
+      type: 'learning_nudge',
+      sessionId,
+      payload: { source: 'session_end', ...nudge },
+    });
+    console.info(formatLearningNudgeForLog(nudge));
+  }
+
+  return formatLearningNudgeCandidateInfoMessage(nudge);
 }
 
 export function createSessionSearchFn(workspaceRootPath: string) {

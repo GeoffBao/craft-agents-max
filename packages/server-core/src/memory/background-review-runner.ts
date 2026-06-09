@@ -23,7 +23,7 @@ export async function runBackgroundReviewIfEnabled(params: {
   agent: ReviewAgent | null | undefined;
 }): Promise<BackgroundReviewSuggestion | null> {
   const cfg = resolveAgentLearningConfig(params.workspaceRootPath);
-  if (!cfg.enabled || !cfg.learningNudge) return null;
+  if (!cfg.enabled || !cfg.backgroundReview) return null;
   if (!params.agent) return null;
   if (!shouldRunBackgroundReview(params.messages.length)) return null;
 

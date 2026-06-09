@@ -27,6 +27,12 @@ CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
   content,
   tokenize = 'porter'
 );
+
+CREATE TABLE IF NOT EXISTS message_timestamps (
+  message_id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  message_ts INTEGER NOT NULL
+);
 `;
 
 export class SessionIndexManager {
@@ -91,6 +97,7 @@ export class SessionIndexManager {
     ).run(sessionId, sessionName, updatedAt);
 
     this.db.prepare('DELETE FROM messages_fts WHERE session_id = ?').run(sessionId);
+    this.db.prepare('DELETE FROM message_timestamps WHERE session_id = ?').run(sessionId);
 
     const content = readFileSync(jsonlPath, 'utf-8');
     const lines = content.split('\n').filter(Boolean);
@@ -98,6 +105,9 @@ export class SessionIndexManager {
 
     const insert = this.db.prepare(
       'INSERT INTO messages_fts (session_id, message_id, role, content) VALUES (?, ?, ?, ?)',
+    );
+    const insertTs = this.db.prepare(
+      'INSERT OR REPLACE INTO message_timestamps (message_id, session_id, message_ts) VALUES (?, ?, ?)',
     );
 
     let count = 0;
@@ -108,6 +118,9 @@ export class SessionIndexManager {
       const role = msg.type ?? 'unknown';
       if (role !== 'user' && role !== 'assistant') continue;
       insert.run(sessionId, msg.id, role, msg.content.slice(0, 8000));
+      if (typeof msg.timestamp === 'number') {
+        insertTs.run(msg.id, sessionId, msg.timestamp);
+      }
       count++;
     }
 
@@ -142,9 +155,10 @@ export class SessionIndexManager {
       const rows = this.db.prepare(`
         SELECT m.session_id, m.message_id, m.role,
           snippet(messages_fts, 2, '[', ']', '…', 32) AS snippet,
-          m.content, s.session_name
+          m.content, s.session_name, t.message_ts
         FROM messages_fts m
         LEFT JOIN sessions s ON s.session_id = m.session_id
+        LEFT JOIN message_timestamps t ON t.message_id = m.message_id
         WHERE messages_fts MATCH ? AND m.session_id = ?
         ORDER BY rank LIMIT ? OFFSET ?
       `).all(ftsQuery, options.sessionId, limit + 1, offset) as Array<{
@@ -154,6 +168,7 @@ export class SessionIndexManager {
       snippet: string;
       content: string;
       session_name: string | null;
+      message_ts: number | null;
     }>;
       return this.mapSearchRows(rows, limit, offset);
     }
@@ -161,9 +176,10 @@ export class SessionIndexManager {
     const rows = this.db.prepare(`
       SELECT m.session_id, m.message_id, m.role,
         snippet(messages_fts, 2, '[', ']', '…', 32) AS snippet,
-        m.content, s.session_name
+        m.content, s.session_name, t.message_ts
       FROM messages_fts m
       LEFT JOIN sessions s ON s.session_id = m.session_id
+      LEFT JOIN message_timestamps t ON t.message_id = m.message_id
       WHERE messages_fts MATCH ?
       ORDER BY rank LIMIT ? OFFSET ?
     `).all(ftsQuery, limit + 1, offset) as Array<{
@@ -173,6 +189,7 @@ export class SessionIndexManager {
       snippet: string;
       content: string;
       session_name: string | null;
+      message_ts: number | null;
     }>;
 
     return this.mapSearchRows(rows, limit, offset);
@@ -186,6 +203,7 @@ export class SessionIndexManager {
       snippet: string;
       content: string;
       session_name: string | null;
+      message_ts?: number | null;
     }>,
     limit: number,
     offset: number,
@@ -199,6 +217,7 @@ export class SessionIndexManager {
       messageId: row.message_id,
       role: row.role,
       snippet: row.snippet || row.content.slice(0, 300),
+      timestamp: row.message_ts ?? undefined,
     }));
 
     return {

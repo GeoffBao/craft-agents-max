@@ -38,6 +38,7 @@ describe('agent-learning config', () => {
     expect(cfg.enabled).toBe(true);
     const tools = getEnabledAgentLearningTools(cfg);
     expect(tools.has('memory')).toBe(true);
+    expect(tools.has('memory_search')).toBe(true);
     expect(tools.has('session_search')).toBe(true);
   });
 

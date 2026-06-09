@@ -24,6 +24,25 @@ export interface LearningNudgeInput {
   userCorrectionCount?: number;
 }
 
+/** True when session had 2+ tool failures then a successful assistant reply. */
+export function detectHadSuccessfulMultiStepFix(
+  messages: Array<{ role: string; content: string; isIntermediate?: boolean }>,
+): boolean {
+  let failures = 0;
+  let sawAssistantAfterFailures = false;
+  for (const m of messages) {
+    if (m.isIntermediate) continue;
+    if (m.role === 'tool' || m.role === 'error') {
+      if (/error|failed|exception/i.test(m.content)) failures++;
+      continue;
+    }
+    if (m.role === 'assistant' && failures >= 2 && m.content.trim().length > 0) {
+      sawAssistantAfterFailures = true;
+    }
+  }
+  return sawAssistantAfterFailures;
+}
+
 export function evaluateLearningNudge(input: LearningNudgeInput): LearningNudgeCandidate | null {
   const base = { sessionId: input.sessionId, createdAt: Date.now() };
 

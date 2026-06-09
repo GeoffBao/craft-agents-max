@@ -577,6 +577,24 @@ export default function WorkspaceSettingsPage() {
                       onCheckedChange={(checked) => handleAgentLearningPatch({ learningNudge: checked })}
                     />
                     <SettingsToggle
+                      label={t("settings.workspace.agentLearningBackgroundReview")}
+                      description={t("settings.workspace.agentLearningBackgroundReviewDesc")}
+                      checked={agentLearning.backgroundReview ?? true}
+                      onCheckedChange={(checked) => handleAgentLearningPatch({ backgroundReview: checked })}
+                    />
+                    <SettingsToggle
+                      label={t("settings.workspace.agentLearningCompactionFlush")}
+                      description={t("settings.workspace.agentLearningCompactionFlushDesc")}
+                      checked={agentLearning.compactionMemoryFlush ?? true}
+                      onCheckedChange={(checked) => handleAgentLearningPatch({ compactionMemoryFlush: checked })}
+                    />
+                    <SettingsToggle
+                      label={t("settings.workspace.agentLearningObservability")}
+                      description={t("settings.workspace.agentLearningObservabilityDesc")}
+                      checked={agentLearning.observability ?? true}
+                      onCheckedChange={(checked) => handleAgentLearningPatch({ observability: checked })}
+                    />
+                    <SettingsToggle
                       label={t("settings.workspace.agentLearningHeartbeat")}
                       description={t("settings.workspace.agentLearningHeartbeatDesc")}
                       checked={agentLearning.heartbeat ?? false}

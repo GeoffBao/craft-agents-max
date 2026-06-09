@@ -5,5 +5,6 @@ export {
   indexSessionForRecall,
   emitSessionEndLearningSignals,
   evaluatePreCompactLearningInfoMessage,
+  evaluateSessionEndLearningInfoMessage,
   createSessionSearchFn,
 } from './agent-learning-hooks.ts';

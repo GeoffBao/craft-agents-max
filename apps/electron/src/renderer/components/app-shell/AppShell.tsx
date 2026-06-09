@@ -118,6 +118,7 @@ import {
 import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
+import { SkillDraftsPanel } from "./SkillDraftsPanel"
 import { AutomationsListPanel } from "../automations/AutomationsListPanel"
 import { APP_EVENTS, AGENT_EVENTS, type AutomationFilterKind, AUTOMATION_TYPE_TO_FILTER_KIND } from "../automations/types"
 import { useAutomations } from "@/hooks/useAutomations"
@@ -820,6 +821,7 @@ function AppShellContent({
 
   // Skills state (workspace-scoped)
   const [skills, setSkills] = React.useState<LoadedSkill[]>([])
+  const [skillDrafts, setSkillDrafts] = React.useState<import('@craft-agent/shared/skills').LoadedSkillDraft[]>([])
   // Sync skills to atom for NavigationContext auto-selection
   const setSkillsAtom = useSetAtom(skillsAtom)
   React.useEffect(() => {
@@ -927,9 +929,10 @@ function AppShellContent({
     const cleanup = window.electronAPI.onSkillsChanged((workspaceId, updatedSkills) => {
       if (workspaceId !== activeWorkspaceId) return
       setSkills(updatedSkills || [])
+      void refreshSkillDrafts()
     })
     return cleanup
-  }, [activeWorkspaceId])
+  }, [activeWorkspaceId, refreshSkillDrafts])
 
   // Handle session source selection changes
   const handleSessionSourcesChange = React.useCallback(async (sessionId: string, sourceSlugs: string[]) => {
@@ -1296,6 +1299,16 @@ function AppShellContent({
   const activeSessionWorkingDirectory = session.selected
     ? sessionMetaMap.get(session.selected)?.workingDirectory
     : undefined
+  const refreshSkillDrafts = React.useCallback(async () => {
+    if (!activeWorkspaceId) return
+    try {
+      const drafts = await window.electronAPI.getSkillDrafts(activeWorkspaceId)
+      setSkillDrafts(drafts || [])
+    } catch (err) {
+      console.error('[Chat] Failed to load skill drafts:', err)
+    }
+  }, [activeWorkspaceId])
+
   React.useEffect(() => {
     if (!activeWorkspaceId) return
     window.electronAPI.getSkills(activeWorkspaceId, activeSessionWorkingDirectory).then((loaded) => {
@@ -1303,7 +1316,8 @@ function AppShellContent({
     }).catch(err => {
       console.error('[Chat] Failed to load skills:', err)
     })
-  }, [activeWorkspaceId, activeSessionWorkingDirectory])
+    void refreshSkillDrafts()
+  }, [activeWorkspaceId, activeSessionWorkingDirectory, refreshSkillDrafts])
 
   // Filter session metadata by active workspace
   // Also exclude hidden sessions (mini-agent sessions) from all counts and lists
@@ -3166,15 +3180,25 @@ function AppShellContent({
               />
             )}
             {isSkillsNavigation(navState) && activeWorkspaceId && (
-              /* Skills List */
-              <SkillsListPanel
-                skills={skills}
-                workspaceId={activeWorkspaceId}
-                workspaceRootPath={activeWorkspace?.rootPath}
-                onSkillClick={handleSkillSelect}
-                onDeleteSkill={handleDeleteSkill}
-                selectedSkillSlug={isSkillsNavigation(navState) && navState.details?.type === 'skill' ? navState.details.skillSlug : null}
-              />
+              <>
+                <SkillDraftsPanel
+                  workspaceId={activeWorkspaceId}
+                  drafts={skillDrafts}
+                  onDraftsChanged={async () => {
+                    await refreshSkillDrafts()
+                    const loaded = await window.electronAPI.getSkills(activeWorkspaceId, activeSessionWorkingDirectory)
+                    setSkills(loaded || [])
+                  }}
+                />
+                <SkillsListPanel
+                  skills={skills}
+                  workspaceId={activeWorkspaceId}
+                  workspaceRootPath={activeWorkspace?.rootPath}
+                  onSkillClick={handleSkillSelect}
+                  onDeleteSkill={handleDeleteSkill}
+                  selectedSkillSlug={isSkillsNavigation(navState) && navState.details?.type === 'skill' ? navState.details.skillSlug : null}
+                />
+              </>
             )}
             {isAutomationsNavigation(navState) && (
               /* Automations List - filtered by type if automationFilter is active */

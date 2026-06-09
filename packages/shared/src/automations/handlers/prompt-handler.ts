@@ -12,6 +12,11 @@ import { APP_EVENTS, type AutomationEvent, type PromptAction, type PendingPrompt
 import type { PermissionMode } from '../../agent/mode-types.ts';
 import { matcherMatches, buildEnvFromPayload, expandEnvVars, parsePromptReferences } from '../utils.ts';
 import { deriveAutomationName } from '../name-utils.ts';
+import { resolveAgentLearningConfig } from '../../agent-learning/config.ts';
+import {
+  buildHeartbeatAutomationPrompt,
+  ensureHeartbeatChecklist,
+} from '../../agent-learning/heartbeat.ts';
 
 const log = createLogger('prompt-handler');
 
@@ -97,9 +102,21 @@ export class PromptHandler implements AutomationHandler {
       const expandedTopic = telegramTopic ? expandEnvVars(telegramTopic, env).trim() : undefined;
       const finalTopic = expandedTopic && expandedTopic.length > 0 ? expandedTopic : undefined;
 
+      let heartbeatPrefix: string | null = null;
+      if (event === 'SchedulerTick') {
+        const cfg = resolveAgentLearningConfig(this.options.workspaceRootPath);
+        if (cfg.enabled && cfg.heartbeat) {
+          ensureHeartbeatChecklist(this.options.workspaceRootPath);
+          heartbeatPrefix = buildHeartbeatAutomationPrompt(this.options.workspaceRootPath);
+        }
+      }
+
       for (const { prompt, labels, permissionMode } of prompts) {
         // Expand environment variables in the prompt
-        const expandedPrompt = expandEnvVars(prompt.prompt, env);
+        let expandedPrompt = expandEnvVars(prompt.prompt, env);
+        if (heartbeatPrefix) {
+          expandedPrompt = `${heartbeatPrefix}\n\n${expandedPrompt}`;
+        }
 
         // Parse references
         const references = parsePromptReferences(expandedPrompt);
