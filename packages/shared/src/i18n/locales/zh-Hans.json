@@ -1067,7 +1067,7 @@
   "settings.workspace.agentLearningCompactionAutoFlush": "压缩时自动写入记忆",
   "settings.workspace.agentLearningCompactionAutoFlushDesc": "开启后自动把压缩前检测到的候选事实写入 MEMORY.md（需显式开启）",
   "settings.workspace.agentLearningCompactionSilentFlush": "静默压缩记忆刷新",
-  "settings.workspace.agentLearningCompactionSilentFlushDesc": "压缩前运行隐藏的 mini-agent 回合，将持久事实写入 memory/daily（需显式开启）",
+  "settings.workspace.agentLearningCompactionSilentFlushDesc": "上下文约 85% 时（或压缩开始时）同步运行隐藏 mini-agent 写 memory/daily；需开启上方「压缩前记忆提示」",
   "settings.workspace.agentLearningDailyMemory": "每日日记记忆",
   "settings.workspace.agentLearningDailyMemoryDesc": "在提示中加载今/昨日日记，并支持 memory 工具 target=daily",
   "settings.workspace.agentLearningObservability": "学习可观测日志",

@@ -1065,7 +1065,7 @@
   "settings.workspace.agentLearningCompactionFlush": "Komprimierungs-Memory-Hinweise",
   "settings.workspace.agentLearningCompactionFlushDesc": "Fakten vor Komprimierung erkennen und memory vorschlagen",
   "settings.workspace.agentLearningCompactionSilentFlush": "Stiller Komprimierungs-Memory-Flush",
-  "settings.workspace.agentLearningCompactionSilentFlushDesc": "Vor Komprimierung einen versteckten Mini-Agent-Lauf ausführen (opt-in)",
+  "settings.workspace.agentLearningCompactionSilentFlushDesc": "Bei ~85 % Kontext (oder bei Komprimierung) versteckten Mini-Agent-Lauf ausführen. Erfordert Komprimierungs-Hinweise.",
   "settings.workspace.agentLearningDailyMemory": "Tagesjournal-Speicher",
   "settings.workspace.agentLearningDailyMemoryDesc": "Heute/Gestern-Journale in den Prompt laden; memory target=daily",
   "settings.workspace.agentLearningObservability": "Learning-Observability-Log",

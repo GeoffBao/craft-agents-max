@@ -79,13 +79,19 @@ export async function runSilentCompactionFlushInWorker(
     providerOptions: { piAuthProvider: backendContext.connection?.piAuthProvider },
   });
 
+  const FLUSH_TIMEOUT_MS = 45_000;
+
   try {
-    return await runSilentCompactionFlushIfEnabled({
+    const work = runSilentCompactionFlushIfEnabled({
       workspaceRootPath,
       sessionId: params.sessionId,
       messages: params.messages,
       agent,
     });
+    const timeout = new Promise<SilentCompactionFlushOutcome>((resolve) => {
+      setTimeout(() => resolve({ result: null, appliedKeys: [] }), FLUSH_TIMEOUT_MS);
+    });
+    return await Promise.race([work, timeout]);
   } finally {
     agent.destroy();
   }

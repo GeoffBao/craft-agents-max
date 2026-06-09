@@ -598,12 +598,14 @@ export default function WorkspaceSettingsPage() {
                       label={t("settings.workspace.agentLearningCompactionAutoFlush")}
                       description={t("settings.workspace.agentLearningCompactionAutoFlushDesc")}
                       checked={agentLearning.compactionMemoryAutoFlush ?? false}
+                      disabled={!(agentLearning.compactionMemoryFlush ?? true)}
                       onCheckedChange={(checked) => handleAgentLearningPatch({ compactionMemoryAutoFlush: checked })}
                     />
                     <SettingsToggle
                       label={t("settings.workspace.agentLearningCompactionSilentFlush")}
                       description={t("settings.workspace.agentLearningCompactionSilentFlushDesc")}
                       checked={agentLearning.compactionSilentFlush ?? false}
+                      disabled={!(agentLearning.compactionMemoryFlush ?? true)}
                       onCheckedChange={(checked) => handleAgentLearningPatch({ compactionSilentFlush: checked })}
                     />
                     <SettingsToggle

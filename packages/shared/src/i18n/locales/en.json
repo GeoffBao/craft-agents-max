@@ -1067,7 +1067,7 @@
   "settings.workspace.agentLearningCompactionAutoFlush": "Auto-flush on compaction",
   "settings.workspace.agentLearningCompactionAutoFlushDesc": "When enabled, write top compaction fact candidates to MEMORY.md automatically (opt-in)",
   "settings.workspace.agentLearningCompactionSilentFlush": "Silent compaction memory flush",
-  "settings.workspace.agentLearningCompactionSilentFlushDesc": "Before compaction, run a hidden mini-agent turn to write durable facts to memory/daily (opt-in)",
+  "settings.workspace.agentLearningCompactionSilentFlushDesc": "At ~85% context (or when compaction starts), await a hidden mini-agent turn to write memory/daily. Requires compaction hints above.",
   "settings.workspace.agentLearningDailyMemory": "Daily journal memory",
   "settings.workspace.agentLearningDailyMemoryDesc": "Load today/yesterday journal files into the prompt and allow memory tool target=daily",
   "settings.workspace.agentLearningObservability": "Learning observability log",

@@ -46,10 +46,6 @@ export function detectHadSuccessfulMultiStepFix(
 export function evaluateLearningNudge(input: LearningNudgeInput): LearningNudgeCandidate | null {
   const base = { sessionId: input.sessionId, createdAt: Date.now() };
 
-  if (input.event === 'PostToolUseFailure' && input.toolName) {
-    return null; // failures alone don't warrant memory writes
-  }
-
   if (input.hadSuccessfulMultiStepFix) {
     return {
       ...base,
@@ -57,6 +53,10 @@ export function evaluateLearningNudge(input: LearningNudgeInput): LearningNudgeC
       reason: 'Multi-step debugging completed successfully — workflow may be worth a skill draft.',
       suggestedSkillTitle: 'debug-workflow',
     };
+  }
+
+  if (input.event === 'PostToolUseFailure') {
+    return null; // isolated tool failures alone don't warrant nudges
   }
 
   if ((input.userCorrectionCount ?? 0) >= 2) {

@@ -33,6 +33,25 @@ describe('learning-nudge', () => {
     expect(nudge?.kind).toBe('skill');
   });
 
+  test('PostToolUseFailure still allows multi-step fix skill nudge', () => {
+    const nudge = evaluateLearningNudge({
+      sessionId: 's1',
+      event: 'PostToolUseFailure',
+      toolName: 'bash',
+      hadSuccessfulMultiStepFix: true,
+    });
+    expect(nudge?.kind).toBe('skill');
+  });
+
+  test('PostToolUseFailure alone returns null', () => {
+    const nudge = evaluateLearningNudge({
+      sessionId: 's1',
+      event: 'PostToolUseFailure',
+      toolName: 'bash',
+    });
+    expect(nudge).toBeNull();
+  });
+
   test('formatLearningNudgeCandidateInfoMessage is suggest-only', () => {
     const text = formatLearningNudgeCandidateInfoMessage({
       sessionId: 's1',

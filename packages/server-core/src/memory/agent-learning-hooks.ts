@@ -119,7 +119,8 @@ export function evaluatePreCompactLearningInfoMessage(
           payload: { source: 'pre_compact', candidates: facts },
         });
       }
-      if (cfg.compactionMemoryAutoFlush) {
+      // Silent flush uses LLM writes — skip regex auto-flush to avoid duplicate MEMORY entries.
+      if (cfg.compactionMemoryAutoFlush && !cfg.compactionSilentFlush) {
         const written: string[] = [];
         for (const fact of facts.slice(-2)) {
           const result = applyMemoryOperation(

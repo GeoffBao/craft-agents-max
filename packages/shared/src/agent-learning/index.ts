@@ -5,5 +5,6 @@ export * from './learning-nudge.ts';
 export * from './heartbeat.ts';
 export * from './compaction-flush.ts';
 export * from './silent-compaction-flush.ts';
+export * from './soft-compaction-flush.ts';
 export * from './background-review.ts';
 export * from './prompt-layers.ts';

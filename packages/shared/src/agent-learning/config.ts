@@ -119,6 +119,18 @@ export function resolveAgentLearningConfig(workspaceRootPath?: string): AgentLea
     return true;
   };
 
+  let compactionMemoryFlush = flag('compactionMemoryFlush');
+  let compactionMemoryAutoFlush = flag('compactionMemoryAutoFlush');
+  let compactionSilentFlush = flag('compactionSilentFlush');
+
+  if ((compactionSilentFlush || compactionMemoryAutoFlush) && !compactionMemoryFlush) {
+    compactionMemoryFlush = true;
+  }
+  if (!compactionMemoryFlush) {
+    compactionMemoryAutoFlush = false;
+    compactionSilentFlush = false;
+  }
+
   return {
     enabled: true,
     persistentMemory: flag('persistentMemory'),
@@ -128,9 +140,9 @@ export function resolveAgentLearningConfig(workspaceRootPath?: string): AgentLea
     contextCompression: flag('contextCompression'),
     learningNudge: flag('learningNudge'),
     backgroundReview: flag('backgroundReview'),
-    compactionMemoryFlush: flag('compactionMemoryFlush'),
-    compactionMemoryAutoFlush: flag('compactionMemoryAutoFlush'),
-    compactionSilentFlush: flag('compactionSilentFlush'),
+    compactionMemoryFlush,
+    compactionMemoryAutoFlush,
+    compactionSilentFlush,
     dailyMemory: flag('dailyMemory'),
     heartbeat: flag('heartbeat'),
     observability: flag('observability'),

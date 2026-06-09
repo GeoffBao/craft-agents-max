@@ -85,7 +85,7 @@ import { type Session, type SessionEvent, type FileAttachment, type SendMessageO
 import { messageToStored, storedToMessage, type Message, type StoredAttachment, type ToolDisplayMeta } from '@craft-agent/core/types'
 import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment, selectSpreadMessages, normalizePath } from '@craft-agent/shared/utils'
 import { loadAllSkills, loadSkillBySlug, invalidateSkillsCache, type LoadedSkill } from '@craft-agent/shared/skills'
-import { resolveAgentLearningConfig } from '@craft-agent/shared/agent-learning'
+import { resolveAgentLearningConfig, shouldRunSoftCompactionFlush } from '@craft-agent/shared/agent-learning'
 import {
   createMemorySearchFn,
   createSessionSearchFn,
@@ -4229,38 +4229,64 @@ export class SessionManager implements ISessionManager {
             }))
         },
         applyContextCompressionFn: async (opts) => {
-          const { shouldCompress, trimOldToolResults } = await import('@craft-agent/shared/agent/context-compression')
+          const { applyContextCompression } = await import('@craft-agent/shared/agent/context-compression')
+          const compressibleIndices: number[] = []
           const compressionMessages = managed.messages
-            .filter(m => !m.isIntermediate)
-            .map(m => ({
+            .flatMap((m, i) => {
+              if (m.isIntermediate) return []
+              if (m.role !== 'user' && m.role !== 'assistant' && m.role !== 'tool') return []
+              compressibleIndices.push(i)
+              return [{
+                role: m.role as 'user' | 'assistant' | 'tool',
+                content: m.content,
+                toolName: m.toolName,
+                isIntermediate: m.isIntermediate,
+              }]
+            })
+
+          const result = applyContextCompression(compressionMessages, opts.tokenThreshold)
+          if (!result.plan.shouldCompress) {
+            return { ok: false, message: result.plan.reason }
+          }
+          if (!result.middleCollapsed && result.trimmedCount === 0) {
+            return { ok: false, message: 'No compressible content changed.' }
+          }
+
+          if (result.middleCollapsed && compressibleIndices.length > 0) {
+            const first = compressibleIndices[0]!
+            const last = compressibleIndices[compressibleIndices.length - 1]!
+            const replacement = result.messages.map(m => ({
+              id: generateMessageId(),
               role: m.role as 'user' | 'assistant' | 'tool',
               content: m.content,
+              timestamp: this.monotonic(),
               toolName: m.toolName,
-              isIntermediate: m.isIntermediate,
             }))
-          const plan = shouldCompress(compressionMessages, opts.tokenThreshold)
-          if (!plan.shouldCompress) {
-            return { ok: false, message: plan.reason }
-          }
-          const trimmed = trimOldToolResults(compressionMessages)
-          let trimmedCount = 0
-          let idx = 0
-          for (const m of managed.messages) {
-            if (m.isIntermediate) continue
-            if (m.role !== 'user' && m.role !== 'assistant' && m.role !== 'tool') continue
-            const next = trimmed[idx++]
-            if (next && m.content !== next.content) {
-              m.content = next.content
-              trimmedCount++
+            managed.messages.splice(first, last - first + 1, ...replacement)
+          } else {
+            let idx = 0
+            for (const m of managed.messages) {
+              if (m.isIntermediate) continue
+              if (m.role !== 'user' && m.role !== 'assistant' && m.role !== 'tool') continue
+              const next = result.messages[idx++]
+              if (next && m.content !== next.content) {
+                m.content = next.content
+              }
             }
           }
+
           this.persistSession(managed)
+          const parts: string[] = []
+          if (result.trimmedCount > 0) {
+            parts.push(`trimmed ${result.trimmedCount} tool result(s)`)
+          }
+          if (result.middleCollapsed) {
+            parts.push(`collapsed middle into ${result.summaryLines}-line summary`)
+          }
           return {
             ok: true,
-            message: trimmedCount > 0
-              ? `Trimmed ${trimmedCount} oversized tool result(s) in session context.`
-              : 'No tool results exceeded trim threshold.',
-            trimmedCount,
+            message: parts.length > 0 ? `Compressed context: ${parts.join('; ')}.` : 'Context compressed.',
+            trimmedCount: result.trimmedCount,
           }
         },
         onAgentLearningEventFn: (event) => {
@@ -6544,6 +6570,51 @@ export class SessionManager implements ISessionManager {
   }
 
   /**
+   * Await silent compaction memory flush (once per compaction cycle).
+   * Primary path: soft threshold after turn complete. Fallback: Compacting status.
+   */
+  private async maybeAwaitSilentCompactionFlush(
+    managed: ManagedSession,
+    sessionId: string,
+    source: 'soft_threshold' | 'compacting',
+  ): Promise<void> {
+    const alCfg = resolveAgentLearningConfig(managed.workspace.rootPath)
+    if (!alCfg.enabled || !alCfg.compactionSilentFlush || !alCfg.compactionMemoryFlush) return
+    if (managed.preCompactSilentFlushEmitted) return
+
+    managed.preCompactSilentFlushEmitted = true
+    sessionLog.info(`Session ${sessionId}: silent compaction flush (${source})`)
+
+    try {
+      const outcome = await runSilentCompactionFlushInWorker({
+        workspace: managed.workspace,
+        sessionId,
+        messages: managed.messages
+          .filter(m => !m.isIntermediate && (m.role === 'user' || m.role === 'assistant'))
+          .map(m => ({ role: m.role, content: m.content })),
+        llmConnection: managed.llmConnection,
+        model: managed.model,
+        workingDirectory: managed.workingDirectory,
+        sdkCwd: managed.sdkCwd,
+        buildHostRuntime: buildBackendHostRuntimeContext,
+      })
+      if (alCfg.observability) {
+        logAgentLearningEvent({
+          type: 'compaction_flush',
+          sessionId,
+          payload: {
+            source: `silent_flush_${source}`,
+            applied: outcome.appliedKeys,
+          },
+        })
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      sessionLog.warn(`Session ${sessionId}: silent compaction flush failed: ${msg}`)
+    }
+  }
+
+  /**
    * Central handler for when processing stops (any reason).
    * Single source of truth for cleanup and queue processing.
    *
@@ -6618,6 +6689,22 @@ export class SessionManager implements ISessionManager {
       managed.pendingExternalMetadata = undefined
       sessionLog.info(`Applying deferred external metadata for session ${sessionId} after processing stop`)
       this.applyExternalSessionMetadata(managed, pendingHeader)
+    }
+
+    // 4.5 Proactive silent flush at soft context threshold (before SDK auto-compaction)
+    if (reason === 'complete' && didReceiveNewFinalMessage) {
+      const alCfg = resolveAgentLearningConfig(managed.workspace.rootPath)
+      if (alCfg.compactionSilentFlush) {
+        const decision = shouldRunSoftCompactionFlush({
+          contextTokens: managed.tokenUsage?.contextTokens,
+          contextWindow: managed.tokenUsage?.contextWindow,
+          messageCount: managed.messages.filter(m => !m.isIntermediate).length,
+        })
+        if (decision.shouldFlush) {
+          sessionLog.info(`Session ${sessionId}: soft threshold — ${decision.reason}`)
+          await this.maybeAwaitSilentCompactionFlush(managed, sessionId, 'soft_threshold')
+        }
+      }
     }
 
     // 5. Check queue and process or complete
@@ -7527,24 +7614,7 @@ export class SessionManager implements ISessionManager {
             isIntermediate: m.isIntermediate,
           }))
 
-          const alCfg = resolveAgentLearningConfig(managed.workspace.rootPath)
-          if (
-            alCfg.compactionSilentFlush &&
-            alCfg.compactionMemoryFlush &&
-            !managed.preCompactSilentFlushEmitted
-          ) {
-            managed.preCompactSilentFlushEmitted = true
-            void runSilentCompactionFlushInWorker({
-              workspace: managed.workspace,
-              sessionId,
-              messages: managed.messages.map(m => ({ role: m.role, content: m.content })),
-              llmConnection: managed.llmConnection,
-              model: managed.model,
-              workingDirectory: managed.workingDirectory,
-              sdkCwd: managed.sdkCwd,
-              buildHostRuntime: buildBackendHostRuntimeContext,
-            })
-          }
+          await this.maybeAwaitSilentCompactionFlush(managed, sessionId, 'compacting')
 
           if (!managed.preCompactLearningNudgeEmitted) {
             const preCompactText = evaluatePreCompactLearningInfoMessage(

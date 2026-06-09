@@ -61,9 +61,36 @@ export function normalizeAgentLearningWorkspaceConfig(
   };
 }
 
+/**
+ * Keep compaction sub-toggles consistent (silent/auto require parent flush hints).
+ */
+export function applyCompactionSettingsLinkage(
+  config: AgentLearningWorkspaceConfig,
+  patch?: Partial<AgentLearningWorkspaceConfig>,
+): AgentLearningWorkspaceConfig {
+  const next = { ...config };
+
+  if (patch?.compactionSilentFlush === true || patch?.compactionMemoryAutoFlush === true) {
+    next.compactionMemoryFlush = true;
+  }
+
+  if (patch?.compactionMemoryFlush === false) {
+    next.compactionMemoryAutoFlush = false;
+    next.compactionSilentFlush = false;
+  } else if (next.compactionMemoryFlush === false) {
+    next.compactionMemoryAutoFlush = false;
+    next.compactionSilentFlush = false;
+  }
+
+  return next;
+}
+
 export function mergeAgentLearningWorkspacePatch(
   current: AgentLearningWorkspaceConfig | undefined,
   patch: Partial<AgentLearningWorkspaceConfig>,
 ): AgentLearningWorkspaceConfig {
-  return normalizeAgentLearningWorkspaceConfig({ ...current, ...patch });
+  return applyCompactionSettingsLinkage(
+    normalizeAgentLearningWorkspaceConfig({ ...current, ...patch }),
+    patch,
+  );
 }

@@ -28,7 +28,7 @@ export interface CompressionPlan {
   protectedTail: number;
 }
 
-const DEFAULT_TOKEN_THRESHOLD = 80_000;
+export const DEFAULT_TOKEN_THRESHOLD = 80_000;
 const CHARS_PER_TOKEN = 4;
 
 export function estimateTokens(text: string): number {
@@ -116,4 +116,78 @@ export function trimOldToolResults(
     }
   }
   return result;
+}
+
+export interface ApplyContextCompressionResult {
+  messages: CompressionMessage[];
+  trimmedCount: number;
+  middleCollapsed: boolean;
+  summaryLines: number;
+  plan: CompressionPlan;
+}
+
+/**
+ * Apply in-session compression: trim old tool results, then collapse middle turns into a summary block.
+ */
+export function applyContextCompression(
+  messages: CompressionMessage[],
+  tokenThreshold = DEFAULT_TOKEN_THRESHOLD,
+): ApplyContextCompressionResult {
+  const plan = shouldCompress(messages, tokenThreshold);
+  if (!plan.shouldCompress) {
+    return {
+      messages,
+      trimmedCount: 0,
+      middleCollapsed: false,
+      summaryLines: 0,
+      plan,
+    };
+  }
+
+  const trimmed = trimOldToolResults(messages);
+  let trimmedCount = 0;
+  for (let i = 0; i < messages.length; i++) {
+    if (messages[i]?.content !== trimmed[i]?.content) trimmedCount++;
+  }
+
+  const tail = plan.protectedTail;
+  if (trimmed.length <= plan.protectedHead + tail) {
+    return {
+      messages: trimmed,
+      trimmedCount,
+      middleCollapsed: false,
+      summaryLines: 0,
+      plan,
+    };
+  }
+
+  const middle = trimmed.slice(plan.protectedHead, trimmed.length - tail);
+  const summary = buildStructuredSummary(middle);
+  if (!summary.trim()) {
+    return {
+      messages: trimmed,
+      trimmedCount,
+      middleCollapsed: false,
+      summaryLines: 0,
+      plan,
+    };
+  }
+
+  const summaryMessage: CompressionMessage = {
+    role: 'assistant',
+    content: `<context_compression_summary>\n${summary}\n</context_compression_summary>`,
+    isIntermediate: false,
+  };
+
+  return {
+    messages: [
+      ...trimmed.slice(0, plan.protectedHead),
+      summaryMessage,
+      ...trimmed.slice(trimmed.length - tail),
+    ],
+    trimmedCount,
+    middleCollapsed: true,
+    summaryLines: summary.split('\n').filter(Boolean).length,
+    plan,
+  };
 }

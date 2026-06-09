@@ -65,6 +65,25 @@ describe('agent-learning config', () => {
     expect(cfg.compactionSilentFlush).toBe(false);
   });
 
+  test('compactionSilentFlush implies compactionMemoryFlush at resolve time', () => {
+    delete process.env.CRAFT_FEATURE_AGENT_LEARNING;
+    writeFileSync(join(workspaceRoot, 'config.json'), JSON.stringify({
+      id: 'ws1',
+      name: 'Test',
+      slug: 'test',
+      createdAt: 1,
+      updatedAt: 1,
+      agentLearning: {
+        enabled: true,
+        compactionMemoryFlush: false,
+        compactionSilentFlush: true,
+      },
+    }));
+    const cfg = resolveAgentLearningConfig(workspaceRoot);
+    expect(cfg.compactionMemoryFlush).toBe(true);
+    expect(cfg.compactionSilentFlush).toBe(true);
+  });
+
   test('workspace overrides dailyMemory and compactionSilentFlush', () => {
     delete process.env.CRAFT_FEATURE_AGENT_LEARNING;
     writeFileSync(join(workspaceRoot, 'config.json'), JSON.stringify({

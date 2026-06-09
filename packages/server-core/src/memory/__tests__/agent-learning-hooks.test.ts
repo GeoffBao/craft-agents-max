@@ -2,7 +2,10 @@ import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { createMemorySearchFn } from '../agent-learning-hooks.ts';
+import {
+  createMemorySearchFn,
+  evaluatePreCompactLearningInfoMessage,
+} from '../agent-learning-hooks.ts';
 
 describe('agent-learning hooks', () => {
   let workspaceRoot: string;
@@ -41,6 +44,28 @@ describe('agent-learning hooks', () => {
     const result = await search({ query: 'FTS memory', limit: 5 });
     expect(result.hits.length).toBeGreaterThan(0);
     expect(result.hits[0]?.target).toBe('memory');
+  });
+
+  test('auto-flush skipped when silent flush enabled', () => {
+    writeFileSync(join(workspaceRoot, 'config.json'), JSON.stringify({
+      id: 'ws1',
+      name: 'Test',
+      slug: 'test',
+      createdAt: 1,
+      updatedAt: 1,
+      agentLearning: {
+        enabled: true,
+        compactionMemoryFlush: true,
+        compactionMemoryAutoFlush: true,
+        compactionSilentFlush: true,
+      },
+    }));
+    const messages = Array.from({ length: 50 }, (_, i) => ({
+      role: 'user',
+      content: i % 3 === 0 ? 'Please always use Bun for scripts' : `msg ${i}`,
+    }));
+    const info = evaluatePreCompactLearningInfoMessage(workspaceRoot, 's1', messages);
+    expect(info).not.toContain('auto-wrote');
   });
 
   test('createMemorySearchFn throws when disabled', async () => {
