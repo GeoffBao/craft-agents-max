@@ -482,24 +482,6 @@ export interface ElectronAPI {
   // Skills change listener (live updates when skills are added/removed/modified)
   onSkillsChanged(callback: (workspaceId: string, skills: LoadedSkill[]) => void): () => void
 
-  // Knowledge base
-  knowledgeSearch(query: string, limit?: number): Promise<import('@craft-agent/knowledge-base').RagChunk[]>
-  knowledgeGetArticle(relativePath: string): Promise<(import('@craft-agent/knowledge-base').VaultDocument & { backlinks: string[] }) | null>
-  knowledgeGetStatus(): Promise<{
-    status: string
-    documentCount: number
-    error: string | null
-    progress: KnowledgeInitProgress | null
-  }>
-  knowledgeGetConfig(): Promise<KnowledgeEngineConfig | null>
-  knowledgeUpdateConfig(patch: Partial<KnowledgeEngineConfig>): Promise<{ ok: true } | { ok: false; error: string }>
-  knowledgeReindex(): Promise<{ ok: true; documentCount: number } | { ok: false; error: string }>
-  knowledgeGetBacklinks(title: string): Promise<string[]>
-  knowledgeListDocs(section?: string): Promise<import('@craft-agent/knowledge-base').VaultDocument[]>
-  knowledgeListBooks(): Promise<KnowledgeBookEntry[]>
-  knowledgeListVaultFiles(): Promise<KnowledgeVaultFileEntry[]>
-  knowledgeReadVaultFile(relativePath: string): Promise<string | null>
-
   // Statuses (workspace-scoped)
   listStatuses(workspaceId: string): Promise<import('@craft-agent/shared/statuses').StatusConfig[]>
   reorderStatuses(workspaceId: string, orderedIds: string[]): Promise<void>
@@ -870,57 +852,6 @@ export interface AutomationsNavigationState {
 }
 
 /**
- * Knowledge navigator view tabs
- */
-export type KnowledgeView = 'wiki' | 'journey' | 'graph' | 'books' | 'canvas' | 'settings'
-
-export interface KnowledgeInitProgress {
-  phase: string
-  message: string
-  percent: number
-  embeddingDone: number
-  embeddingTotal: number
-}
-
-export interface KnowledgeEngineConfig {
-  vaultPath: string
-  cachePath: string
-  autoInject: boolean
-  injectThreshold: number
-  injectMaxChunks: number
-  writeBackMode: 'on_session_end' | 'on_every_turn' | 'disabled'
-  embeddingModel: string
-  indexedSections: string[]
-  enableEmbeddings: boolean
-}
-
-export interface KnowledgeBookEntry {
-  relativePath: string
-  title: string
-  author: string
-  cover?: string
-  progress?: string
-  lastReadDate?: string
-  source: 'weread' | 'readwise' | 'apple-books'
-}
-
-export interface KnowledgeVaultFileEntry {
-  relativePath: string
-  name: string
-  kind: 'canvas' | 'excalidraw'
-}
-
-/**
- * Knowledge navigation state
- */
-export interface KnowledgeNavigationState {
-  navigator: 'knowledge'
-  view: KnowledgeView
-  details: { type: 'article'; relativePath: string } | null
-  rightSidebar?: RightSidebarPanel
-}
-
-/**
  * Unified navigation state
  */
 export type NavigationState =
@@ -929,7 +860,6 @@ export type NavigationState =
   | SettingsNavigationState
   | SkillsNavigationState
   | AutomationsNavigationState
-  | KnowledgeNavigationState
 
 export const isSessionsNavigation = (
   state: NavigationState
@@ -950,10 +880,6 @@ export const isSkillsNavigation = (
 export const isAutomationsNavigation = (
   state: NavigationState
 ): state is AutomationsNavigationState => state.navigator === 'automations'
-
-export const isKnowledgeNavigation = (
-  state: NavigationState
-): state is KnowledgeNavigationState => state.navigator === 'knowledge'
 
 export const DEFAULT_NAVIGATION_STATE: NavigationState = {
   navigator: 'sessions',
@@ -979,12 +905,6 @@ export const getNavigationStateKey = (state: NavigationState): string => {
       return `automations/automation/${state.details.automationId}`
     }
     return 'automations'
-  }
-  if (state.navigator === 'knowledge') {
-    if (state.details?.type === 'article') {
-      return `knowledge/${state.view}/article/${encodeURIComponent(state.details.relativePath)}`
-    }
-    return `knowledge/${state.view}`
   }
   if (state.navigator === 'settings') {
     if (state.subpage === null) return 'settings'
@@ -1022,19 +942,6 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
       return { navigator: 'skills', details: { type: 'skill', skillSlug } }
     }
     return { navigator: 'skills', details: null }
-  }
-
-  // Handle knowledge
-  if (key.startsWith('knowledge')) {
-    const rest = key.slice(10) // 'knowledge/'.length === 10
-    const view = (rest.split('/')[0] as KnowledgeView | undefined) ?? 'wiki'
-    const validViews: KnowledgeView[] = ['wiki', 'journey', 'graph', 'books', 'canvas', 'settings']
-    const safeView: KnowledgeView = validViews.includes(view) ? view : 'wiki'
-    const articleMatch = rest.match(/^(?:\w+)\/article\/(.+)$/)
-    if (articleMatch?.[1]) {
-      return { navigator: 'knowledge', view: safeView, details: { type: 'article', relativePath: decodeURIComponent(articleMatch[1]) } }
-    }
-    return { navigator: 'knowledge', view: safeView, details: null }
   }
 
   // Handle automations

@@ -2016,8 +2016,6 @@ export class PiAgent extends BaseAgent {
         { plansFolderPath: getSessionPlansPath(this.config.workspace.rootPath, this._sessionId) },
         sourceContext
       );
-      const kbContext = await this.promptBuilder.buildKnowledgeContext(message);
-      if (kbContext) contextParts.push(kbContext);
 
       // Process attachments
       const attachmentParts: string[] = [];

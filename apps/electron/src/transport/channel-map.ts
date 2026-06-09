@@ -233,19 +233,6 @@ export const CHANNEL_MAP = {
   openSkillInFinder: invoke(RPC_CHANNELS.skills.OPEN_FINDER),
   onSkillsChanged: listener(RPC_CHANNELS.skills.CHANGED),
 
-  // Knowledge base
-  knowledgeSearch: invoke(RPC_CHANNELS.knowledge.SEARCH),
-  knowledgeGetArticle: invoke(RPC_CHANNELS.knowledge.GET_ARTICLE),
-  knowledgeGetStatus: invoke(RPC_CHANNELS.knowledge.GET_STATUS),
-  knowledgeGetBacklinks: invoke(RPC_CHANNELS.knowledge.GET_BACKLINKS),
-  knowledgeListDocs: invoke(RPC_CHANNELS.knowledge.LIST_DOCS),
-  knowledgeListBooks: invoke(RPC_CHANNELS.knowledge.LIST_BOOKS),
-  knowledgeListVaultFiles: invoke(RPC_CHANNELS.knowledge.LIST_VAULT_FILES),
-  knowledgeReadVaultFile: invoke(RPC_CHANNELS.knowledge.READ_VAULT_FILE),
-  knowledgeGetConfig: invoke(RPC_CHANNELS.knowledge.GET_CONFIG),
-  knowledgeUpdateConfig: invoke(RPC_CHANNELS.knowledge.UPDATE_CONFIG),
-  knowledgeReindex: invoke(RPC_CHANNELS.knowledge.REINDEX),
-
   // Statuses
   listStatuses: invoke(RPC_CHANNELS.statuses.LIST),
   reorderStatuses: invoke(RPC_CHANNELS.statuses.REORDER),

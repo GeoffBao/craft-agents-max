@@ -111,7 +111,6 @@ import { handleDeepLink } from './deep-link'
 import { BrowserPaneManager } from './browser-pane-manager'
 import { OAuthFlowStore } from '@craft-agent/shared/auth'
 import { registerThumbnailScheme, registerThumbnailHandler } from './thumbnail-protocol'
-import { registerVaultScheme, registerVaultHandler } from './vault-protocol'
 import log, { isDebugMode, mainLog, getLogFilePath, getMessagingGatewayLogFilePath, messagingGatewayLog } from './logger'
 import { setPerfEnabled, enableDebug } from '@craft-agent/shared/utils'
 import { registerPiModelResolver } from '@craft-agent/shared/config'
@@ -120,7 +119,6 @@ import { initNotificationService, initBadgeIcon, initInstanceBadge, updateBadgeC
 import { checkForUpdatesOnLaunch, setAutoUpdateEventSink, isUpdating, setBeforeUpdateQuitHook } from './auto-update'
 import type { EventSink } from '@craft-agent/server-core/transport'
 import { validateGitBashPath, checkVCRedistInstalled } from '@craft-agent/server-core/services'
-import { initKnowledgeBaseEngine, disposeKnowledgeBaseEngine } from './knowledge-bootstrap'
 
 // Initialize electron-log for renderer process support
 log.initialize()
@@ -286,8 +284,6 @@ if (process.env.CRAFT_SERVER_URL) {
 // Register thumbnail:// custom protocol for file preview thumbnails in the sidebar.
 // Must happen before app.whenReady() — Electron requires early scheme registration.
 registerThumbnailScheme()
-// Register vault:// protocol for serving knowledge base attachments/images.
-registerVaultScheme()
 
 // Handle deeplink on macOS (when app is already running)
 app.on('open-url', (event, url) => {
@@ -421,8 +417,6 @@ app.whenReady().then(async () => {
 
   // Register thumbnail:// protocol handler (scheme was registered earlier, before app.whenReady)
   registerThumbnailHandler()
-  // Register vault:// protocol handler for knowledge base asset serving
-  registerVaultHandler()
 
   // Re-apply proxy settings now that Electron sessions are available
   // (first call before app.whenReady only configured Node-level proxy)
@@ -768,9 +762,6 @@ app.whenReady().then(async () => {
       } catch (err) {
         mainLog.error('[messaging] Gateway initialization failed:', err)
       }
-
-      // Knowledge base engine — background index; handlers return empty until ready
-      void initKnowledgeBaseEngine()
 
       // IPC handlers — preload uses sendSync to get WS connection details
 
@@ -1238,8 +1229,6 @@ app.on('before-quit', async (event) => {
         mainLog.error('[messaging] dispose failed:', err)
       }
     }
-
-    await disposeKnowledgeBaseEngine()
 
     // Clean up power manager (release power blocker)
     const { cleanup: cleanupPowerManager } = await import('./power-manager')

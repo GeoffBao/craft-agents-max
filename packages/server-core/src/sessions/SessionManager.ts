@@ -96,7 +96,6 @@ import { extractLabelId, resolveSessionLabels } from '@craft-agent/shared/labels
 import { ensureLabelsExist } from '@craft-agent/shared/labels/crud'
 import { loadStatusConfig } from '@craft-agent/shared/statuses/storage'
 import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntry, type AutomationSystemMetadataSnapshot } from '@craft-agent/shared/automations'
-import { getTurnCompleteHandlers } from '@craft-agent/session-tools-core'
 import { buildBackendRuntimeSignature, buildRestartRequiredSignature, filterAttachmentsForModelInput } from './runtime-config'
 import { selectFallbackConnectionSlug } from './fallback-selection'
 
@@ -6416,16 +6415,6 @@ export class SessionManager implements ISessionManager {
     if (!managed) return
 
     sessionLog.info(`Processing stopped for session ${sessionId}: ${reason}`)
-
-    // Fire turn-complete handlers (e.g. knowledge-base write-back) — fire-and-forget.
-    if (reason === 'complete') {
-      const workspaceRootPath = managed.workspace.rootPath
-      for (const handler of getTurnCompleteHandlers()) {
-        handler({ sessionId, workspaceRootPath }).catch((err: unknown) => {
-          sessionLog.warn(`Turn-complete handler error for ${sessionId}: ${err instanceof Error ? err.message : String(err)}`)
-        })
-      }
-    }
 
     // 1. Cleanup state
     this.setProcessing(managed, false)

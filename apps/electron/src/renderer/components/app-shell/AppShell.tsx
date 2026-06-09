@@ -20,7 +20,6 @@ import {
   Trash2,
   DatabaseZap,
   Zap,
-  BookOpen,
   Inbox,
   Globe,
   FolderOpen,
@@ -33,10 +32,6 @@ import {
   Bot,
   Info,
   MailOpen,
-  Network,
-  BookMarked,
-  Layout,
-  Library,
 } from "lucide-react"
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
 import { SourceAvatar } from "@/components/ui/source-avatar"
@@ -118,12 +113,8 @@ import {
   isSettingsNavigation,
   isSkillsNavigation,
   isAutomationsNavigation,
-  isKnowledgeNavigation,
   type NavigationState,
 } from "@/contexts/NavigationContext"
-import { KnowledgeListPanel } from "@/components/knowledge/KnowledgeListPanel"
-import { KnowledgeContentPanel } from "@/components/knowledge/KnowledgeContentPanel"
-import type { KnowledgeView } from "../../../shared/types"
 import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
@@ -1708,16 +1699,6 @@ function AppShellContent({
     navigate(routes.view.skills())
   }, [])
 
-  // Handler for knowledge view
-  const handleKnowledgeClick = useCallback(() => {
-    navigate(routes.view.knowledge('wiki'))
-  }, [])
-  const handleKnowledgeWikiClick = useCallback(() => navigate(routes.view.knowledge('wiki')), [])
-  const handleKnowledgeJourneyClick = useCallback(() => navigate(routes.view.knowledge('journey')), [])
-  const handleKnowledgeGraphClick = useCallback(() => navigate(routes.view.knowledge('graph')), [])
-  const handleKnowledgeBooksClick = useCallback(() => navigate(routes.view.knowledge('books')), [])
-  const handleKnowledgeCanvasClick = useCallback(() => navigate(routes.view.knowledge('canvas')), [])
-
   // Handlers for automations view
   const handleAutomationsClick = useCallback(() => {
     navigate(routes.view.automations())
@@ -2098,11 +2079,6 @@ function AppShellContent({
       return t("sidebar.sources")
     }
 
-    // Knowledge navigator
-    if (isKnowledgeNavigation(navState)) {
-      return t("sidebar.allKnowledge")
-    }
-
     // Skills navigator
     if (isSkillsNavigation(navState)) {
       return t("sidebar.allSkills")
@@ -2447,53 +2423,6 @@ function AppShellContent({
                         type: 'skills',
                         onAddSkill: openAddSkill,
                       },
-                    },
-                    {
-                      id: "nav:knowledge",
-                      title: t("sidebar.knowledge"),
-                      icon: BookOpen,
-                      variant: isKnowledgeNavigation(navState) ? "default" : "ghost",
-                      onClick: handleKnowledgeClick,
-                      expandable: true,
-                      expanded: isExpanded('nav:knowledge'),
-                      onToggle: () => toggleExpanded('nav:knowledge'),
-                      items: [
-                        {
-                          id: "nav:knowledge:wiki",
-                          title: "Wiki",
-                          icon: BookOpen,
-                          variant: (isKnowledgeNavigation(navState) && navState.view === 'wiki') ? "default" : "ghost",
-                          onClick: handleKnowledgeWikiClick,
-                        },
-                        {
-                          id: "nav:knowledge:journey",
-                          title: "Journey",
-                          icon: BookMarked,
-                          variant: (isKnowledgeNavigation(navState) && navState.view === 'journey') ? "default" : "ghost",
-                          onClick: handleKnowledgeJourneyClick,
-                        },
-                        {
-                          id: "nav:knowledge:graph",
-                          title: "Graph",
-                          icon: Network,
-                          variant: (isKnowledgeNavigation(navState) && navState.view === 'graph') ? "default" : "ghost",
-                          onClick: handleKnowledgeGraphClick,
-                        },
-                        {
-                          id: "nav:knowledge:books",
-                          title: "Books",
-                          icon: Library,
-                          variant: (isKnowledgeNavigation(navState) && navState.view === 'books') ? "default" : "ghost",
-                          onClick: handleKnowledgeBooksClick,
-                        },
-                        {
-                          id: "nav:knowledge:canvas",
-                          title: "Canvas",
-                          icon: Layout,
-                          variant: (isKnowledgeNavigation(navState) && navState.view === 'canvas') ? "default" : "ghost",
-                          onClick: handleKnowledgeCanvasClick,
-                        },
-                      ],
                     },
                     {
                       id: "nav:automations",
@@ -3234,14 +3163,6 @@ function AppShellContent({
                 onSourceClick={handleSourceSelect}
                 selectedSourceSlug={isSourcesNavigation(navState) && navState.details ? navState.details.sourceSlug : null}
                 localMcpEnabled={localMcpEnabled}
-              />
-            )}
-            {isKnowledgeNavigation(navState) && (
-              /* Knowledge navigator list panel */
-              <KnowledgeListPanel
-                currentView={isKnowledgeNavigation(navState) ? navState.view : 'wiki'}
-                onViewChange={(view: KnowledgeView) => navigate(routes.view.knowledge(view))}
-                onArticleSelect={(path: string) => navigate(routes.view.knowledge('wiki', path))}
               />
             )}
             {isSkillsNavigation(navState) && activeWorkspaceId && (

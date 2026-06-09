@@ -564,18 +564,6 @@ export interface SessionToolFilterOptions {
   includeDeveloperFeedback?: boolean;
 }
 
-// ============================================================
-// External Tool Registry (plugin extension point)
-// One-time additions registered at app startup — never modified directly.
-// ============================================================
-
-const _externalToolDefs: SessionToolDef[] = [];
-
-/** Register additional tools (e.g. knowledge-base) at app startup before any session. */
-export function registerExternalTools(defs: SessionToolDef[]): void {
-  _externalToolDefs.push(...defs);
-}
-
 /**
  * Return session tools with optional feature filtering.
  *
@@ -585,13 +573,12 @@ export function registerExternalTools(defs: SessionToolDef[]): void {
 export function getSessionToolDefs(options?: SessionToolFilterOptions): SessionToolDef[] {
   const includeDeveloperFeedback = options?.includeDeveloperFeedback ?? true;
 
-  const base = SESSION_TOOL_DEFS.filter(def => {
+  return SESSION_TOOL_DEFS.filter(def => {
     if (!includeDeveloperFeedback && def.name === 'send_developer_feedback') {
       return false;
     }
     return true;
   });
-  return [...base, ..._externalToolDefs];
 }
 
 /**

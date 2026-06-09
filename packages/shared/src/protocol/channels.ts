@@ -282,19 +282,6 @@ export const RPC_CHANNELS = {
   toolIcons: {
     GET_MAPPINGS: 'toolIcons:getMappings',
   },
-  knowledge: {
-    SEARCH: 'knowledge:search',
-    GET_ARTICLE: 'knowledge:getArticle',
-    GET_STATUS: 'knowledge:getStatus',
-    GET_BACKLINKS: 'knowledge:getBacklinks',
-    LIST_DOCS: 'knowledge:listDocs',
-    LIST_BOOKS: 'knowledge:listBooks',
-    LIST_VAULT_FILES: 'knowledge:listVaultFiles',
-    READ_VAULT_FILE: 'knowledge:readVaultFile',
-    GET_CONFIG: 'knowledge:getConfig',
-    UPDATE_CONFIG: 'knowledge:updateConfig',
-    REINDEX: 'knowledge:reindex',
-  },
   logo: {
     GET_URL: 'logo:getUrl',
   },
