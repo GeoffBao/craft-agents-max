@@ -8,7 +8,7 @@ import { basename, dirname, join } from 'path'
 import { existsSync } from 'fs'
 import { readFile, writeFile, mkdir } from 'fs/promises'
 import { randomUUID } from 'node:crypto'
-import { type AgentEvent, setPermissionMode, hydratePreviousPermissionMode, getPermissionModeDiagnostics, type PermissionMode, unregisterSessionScopedToolCallbacks, mergeSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest, type BrowserPaneFns, generateConversationSummary } from '@craft-agent/shared/agent'
+import { type AgentEvent, setPermissionMode, hydratePreviousPermissionMode, getPermissionModeDiagnostics, type PermissionMode, unregisterSessionScopedToolCallbacks, mergeSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest, type BrowserPaneFns, generateConversationSummary, buildConversationSummaryTranscript } from '@craft-agent/shared/agent'
 import {
   resolveSessionConnection,
   createBackendFromConnection,
@@ -20,7 +20,7 @@ import {
   type BackendHostRuntimeContext,
   type PostInitResult,
 } from '@craft-agent/shared/agent/backend'
-import { getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior } from '@craft-agent/shared/config'
+import { getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior, isAnthropicProvider, type LlmConnection } from '@craft-agent/shared/config'
 import { PrivilegedExecutionBroker } from '@craft-agent/server-core/services'
 import { isValidWorkingDirectory } from '../utils/path-validation'
 import { InitGate } from '@craft-agent/server-core/domain'
@@ -98,6 +98,7 @@ import { loadStatusConfig } from '@craft-agent/shared/statuses/storage'
 import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntry, type AutomationSystemMetadataSnapshot } from '@craft-agent/shared/automations'
 import { getTurnCompleteHandlers } from '@craft-agent/session-tools-core'
 import { buildBackendRuntimeSignature, buildRestartRequiredSignature, filterAttachmentsForModelInput } from './runtime-config'
+import { selectFallbackConnectionSlug } from './fallback-selection'
 
 // Import from server-core domain utilities
 import { sanitizeForTitle, shouldActivateBrowserOverlay, normalizeBrowserToolName, rollbackFailedBranchCreation, releaseBrowserOwnershipOnForcedStop } from '@craft-agent/server-core/domain'
@@ -951,6 +952,11 @@ interface ManagedSession {
     /** True after the first matching sendMessage consumes the slot; later matches drop. */
     committed: boolean
   }
+  // Quota-exhaustion auto-fallback. Tracks which connections already failed with
+  // a quota/billing error this turn so we cycle forward instead of looping, and a
+  // re-entrancy guard so a fallback's own resend doesn't spawn nested fallbacks.
+  fallbackAttemptedSlugs?: Set<string>
+  quotaFallbackInProgress?: boolean
 }
 
 const PI_SDK_MESSAGE_ID_CACHE_LIMIT = 256
@@ -5102,17 +5108,25 @@ export class SessionManager implements ISessionManager {
     const managed = this.sessions.get(sessionId)
     if (managed) {
       managed.model = model ?? undefined
-      // Also update connection if provided and not already locked
+      const wantsConnectionChange = !!connection && connection !== managed.llmConnection
       if (connection && !managed.connectionLocked) {
+        // Pre-lock: just record the chosen connection.
         managed.llmConnection = connection
+      } else if (wantsConnectionChange) {
+        // Post-lock manual switch (e.g. user picks a model from another connection
+        // because the current one is rate-limited / out of quota). This rebuilds the
+        // backend and, when crossing the Anthropic↔Pi boundary, carries a one-shot
+        // transcript so the new provider has prior context.
+        await this.applyConnectionSwitch(managed, connection, 'manual')
       }
       // Persist to disk (include connection if it was updated)
       const updates: { model?: string; llmConnection?: string } = { model: model ?? undefined }
-      if (connection && !managed.connectionLocked) {
-        updates.llmConnection = connection
+      if (connection && (!managed.connectionLocked || wantsConnectionChange)) {
+        updates.llmConnection = managed.llmConnection
       }
       await updateSessionMetadata(managed.workspace.rootPath, sessionId, updates)
-      // Update agent model if it already exists (takes effect on next query)
+      // Update agent model if it already exists (takes effect on next query).
+      // applyConnectionSwitch() nulls the agent, so this branch is skipped after a switch.
       if (managed.agent) {
         // Fallback chain: session model > workspace default > connection default
         const wsConfig = loadWorkspaceConfig(managed.workspace.rootPath)
@@ -6195,6 +6209,199 @@ export class SessionManager implements ISessionManager {
   }
 
   /**
+   * Switch a (possibly already-locked) session to a different LLM connection and
+   * rebuild its backend on the next turn. Used by the manual model picker
+   * (cross-connection selection) and by quota auto-fallback.
+   *
+   * When the switch crosses the Anthropic↔Pi backend boundary, the new backend
+   * cannot resume the old one's native history, so we inject a one-shot plaintext
+   * transcript as transferred context and drop the foreign SDK session id. The
+   * transcript is built deterministically from messages (no LLM call) because the
+   * outgoing provider may be the one that just failed.
+   */
+  private async applyConnectionSwitch(
+    managed: ManagedSession,
+    newSlug: string,
+    reason: 'manual' | 'quota-fallback',
+  ): Promise<void> {
+    const oldSlug = managed.llmConnection
+    if (oldSlug === newSlug) return
+
+    const oldConn = oldSlug ? getLlmConnection(oldSlug) : null
+    const newConn = getLlmConnection(newSlug)
+    if (!newConn) throw new Error(`LLM connection "${newSlug}" not found`)
+
+    const crossesProviderFamily =
+      !!oldConn && isAnthropicProvider(oldConn.providerType) !== isAnthropicProvider(newConn.providerType)
+
+    if (crossesProviderFamily) {
+      await this.ensureMessagesLoaded(managed)
+      const recovery = managed.messages
+        .filter(m => (m.role === 'user' || m.role === 'assistant') && !m.isIntermediate)
+        .map(m => ({ type: m.role as 'user' | 'assistant', content: m.content }))
+      const transcript = buildConversationSummaryTranscript(recovery)
+      if (transcript) {
+        managed.transferredSessionSummary = transcript
+        managed.transferredSessionSummaryApplied = false
+      }
+      // The new provider can't resume a foreign Claude SDK session.
+      managed.sdkSessionId = undefined
+      managed.branchFromSdkSessionId = undefined
+    }
+
+    managed.llmConnection = newSlug
+    managed.connectionLocked = true
+    // Guarantee a clean rebuild with the new provider/auth on the next turn.
+    managed.agent = null
+
+    await updateSessionMetadata(managed.workspace.rootPath, managed.id, {
+      llmConnection: newSlug,
+    })
+    // persistSession serializes the full header (sdkSessionId, transferredSessionSummary,
+    // transferredSessionSummaryApplied) which updateSessionMetadata doesn't cover.
+    this.persistSession(managed)
+
+    sessionLog.info(
+      `[connection-switch] session ${managed.id}: ${oldSlug ?? '(none)'} -> ${newSlug} (${reason}, crossFamily=${crossesProviderFamily})`,
+    )
+
+    this.sendEvent({
+      type: 'connection_changed',
+      sessionId: managed.id,
+      connectionSlug: newSlug,
+      supportsBranching: resolveSupportsBranching(managed),
+    }, managed.workspace.id)
+  }
+
+  /**
+   * Pick the next fallback connection for a session whose current connection ran
+   * out of quota. Honors an explicit `defaults.fallbackConnections` order when set,
+   * otherwise auto-selects any other authenticated connection. Skips the current
+   * connection and any already attempted this turn.
+   */
+  private async resolveFallbackConnectionSlug(managed: ManagedSession): Promise<string | undefined> {
+    const cred = getCredentialManager()
+    const all = getLlmConnections()
+
+    const wsConfig = loadWorkspaceConfig(managed.workspace.rootPath)
+    const explicit = wsConfig?.defaults?.fallbackConnections ?? []
+
+    const ordered: LlmConnection[] = explicit.length > 0
+      ? explicit
+          .map(slug => all.find(c => c.slug === slug))
+          .filter((c): c is LlmConnection => !!c)
+      : all
+
+    const candidates = await Promise.all(ordered.map(async c => ({
+      slug: c.slug,
+      isAuthenticated: c.authType === 'none' || await cred.hasLlmCredentials(c.slug, c.authType),
+    })))
+
+    return selectFallbackConnectionSlug(
+      candidates,
+      managed.llmConnection,
+      managed.fallbackAttemptedSlugs ?? new Set<string>(),
+    )
+  }
+
+  /**
+   * Attempt to recover a turn that failed with a quota/billing error by switching
+   * to a fallback connection and replaying the last user message. Mirrors
+   * {@link attemptAuthRetry}. Returns true when a fallback was scheduled (the
+   * caller should suppress the original error). Returns false to let the error
+   * surface normally (feature disabled, nothing to replay, or already in progress).
+   */
+  private attemptQuotaFallback(
+    sessionId: string,
+    managed: ManagedSession,
+    workspaceId: string,
+    errorCode?: string,
+  ): boolean {
+    if (managed.quotaFallbackInProgress || !managed.lastSentMessage) return false
+
+    const wsConfig = loadWorkspaceConfig(managed.workspace.rootPath)
+    // Default ON: only disabled when explicitly set to false.
+    if (wsConfig?.defaults?.autoModelFallback === false) return false
+
+    managed.quotaFallbackInProgress = true
+    if (!managed.fallbackAttemptedSlugs) managed.fallbackAttemptedSlugs = new Set<string>()
+    if (managed.llmConnection) managed.fallbackAttemptedSlugs.add(managed.llmConnection)
+
+    setImmediate(async () => {
+      try {
+        const nextSlug = await this.resolveFallbackConnectionSlug(managed)
+        if (!nextSlug) {
+          managed.quotaFallbackInProgress = false
+          sessionLog.info(`[quota-fallback] No fallback connection available for ${sessionId}; surfacing error`)
+          this.emitQuotaFallbackExhaustedError(sessionId, managed, workspaceId, errorCode)
+          return
+        }
+
+        const fromName = managed.llmConnection
+          ? (getLlmConnection(managed.llmConnection)?.name ?? managed.llmConnection)
+          : 'current model'
+        const toName = getLlmConnection(nextSlug)?.name ?? nextSlug
+
+        this.sendEvent({
+          type: 'info',
+          sessionId,
+          message: `“${fromName}” 额度不足，正在切换到 “${toName}” 继续…`,
+          timestamp: this.monotonic(),
+        }, workspaceId)
+
+        await this.applyConnectionSwitch(managed, nextSlug, 'quota-fallback')
+
+        const retryMessage = managed.lastSentMessage
+        const retryAttachments = managed.lastSentAttachments
+        const retryStoredAttachments = managed.lastSentStoredAttachments
+        const retryOptions = managed.lastSentOptions
+
+        this.setProcessing(managed, false)
+        // Remove the user message added for the failed attempt so the replay
+        // doesn't duplicate it (same approach as attemptAuthRetry).
+        const lastUserMsgIndex = managed.messages.findLastIndex(m => m.role === 'user')
+        if (lastUserMsgIndex !== -1) managed.messages.splice(lastUserMsgIndex, 1)
+
+        managed.quotaFallbackInProgress = false
+
+        if (retryMessage) {
+          sessionLog.info(`[quota-fallback] Replaying message on "${nextSlug}" for session ${sessionId}`)
+          await this.sendMessage(sessionId, retryMessage, retryAttachments, retryStoredAttachments, retryOptions)
+        }
+      } catch (err) {
+        managed.quotaFallbackInProgress = false
+        sessionLog.error(`[quota-fallback] Failed for session ${sessionId}:`, err)
+        sessionRuntimeHooks.captureException(err, { errorSource: 'quota-fallback', sessionId })
+        this.emitQuotaFallbackExhaustedError(sessionId, managed, workspaceId, errorCode)
+      }
+    })
+
+    return true
+  }
+
+  /**
+   * Surface a terminal error when no (further) fallback connection is available.
+   */
+  private emitQuotaFallbackExhaustedError(
+    sessionId: string,
+    managed: ManagedSession,
+    workspaceId: string,
+    errorCode?: string,
+  ): void {
+    const content = '所有可用模型的额度都已耗尽，请检查各 Provider 的余额，或在工作区设置中配置 fallback 连接。'
+    const errorMsg: Message = {
+      id: generateMessageId(),
+      role: 'error',
+      content,
+      timestamp: this.monotonic(),
+      errorCode: errorCode ?? 'quota_exhausted',
+    }
+    managed.messages.push(errorMsg)
+    this.sendEvent({ type: 'error', sessionId, error: content, timestamp: errorMsg.timestamp }, workspaceId)
+    this.onProcessingStopped(sessionId, 'error')
+  }
+
+  /**
    * Central handler for when processing stops (any reason).
    * Single source of truth for cleanup and queue processing.
    *
@@ -6223,6 +6430,13 @@ export class SessionManager implements ISessionManager {
     // 1. Cleanup state
     this.setProcessing(managed, false)
     managed.stopRequested = false  // Reset for next turn
+
+    // A turn that reached a clean stop clears the quota-fallback trail so a future
+    // quota event can fall back again from scratch.
+    if (reason === 'complete') {
+      managed.fallbackAttemptedSlugs = undefined
+      managed.quotaFallbackInProgress = false
+    }
 
     const turnStartFinalMessageId = managed.turnStartFinalMessageId
     managed.turnStartFinalMessageId = undefined
@@ -7234,6 +7448,25 @@ export class SessionManager implements ISessionManager {
           break
         }
 
+        // Defensive: quota/credits exhaustion can arrive as a plain (untyped) error
+        // from the Pi backend. Classify and try fallback before surfacing.
+        const isPlainQuotaError =
+          lowerErr.includes('insufficient_quota') ||
+          lowerErr.includes('insufficient quota') ||
+          lowerErr.includes('exceeded your current quota') ||
+          lowerErr.includes('quota exceeded') ||
+          lowerErr.includes('out of credits') ||
+          lowerErr.includes('insufficient_balance') ||
+          lowerErr.includes('insufficient balance') ||
+          lowerErr.includes('balance is insufficient') ||
+          lowerErr.includes('余额不足') ||
+          lowerErr.includes('额度不足') ||
+          lowerErr.includes('配额不足') ||
+          lowerErr.includes('欠费')
+        if (isPlainQuotaError && this.attemptQuotaFallback(sessionId, managed, workspaceId, 'quota_exhausted')) {
+          break
+        }
+
         // AgentEvent uses `message` not `error`
         const errorMessage: Message = {
           id: generateMessageId(),
@@ -7273,6 +7506,13 @@ export class SessionManager implements ISessionManager {
 
         if (isAuthError && this.attemptAuthRetry(sessionId, managed, workspaceId, event.error.code)) {
           // Don't add error message or send to renderer - we're handling it via retry
+          break
+        }
+
+        // Quota/credits exhausted (or hard billing block) — try switching to a
+        // fallback connection and replaying, instead of surfacing a dead end.
+        const isQuotaError = event.error.code === 'quota_exhausted' || event.error.code === 'billing_error'
+        if (isQuotaError && this.attemptQuotaFallback(sessionId, managed, workspaceId, event.error.code)) {
           break
         }
 

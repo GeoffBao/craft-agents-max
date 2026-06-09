@@ -381,7 +381,9 @@ interface WorkspaceOverrideCardProps {
 }
 
 const WORKSPACE_SETTING_LABELS: Partial<Record<keyof WorkspaceSettings, string>> = {
+  autoModelFallback: 'workspace model fallback',
   defaultLlmConnection: 'workspace connection override',
+  fallbackConnections: 'workspace fallback chain',
   model: 'workspace model override',
   thinkingLevel: 'workspace thinking override',
 }
@@ -452,11 +454,25 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
     updateSetting('thinkingLevel', level === 'global' ? undefined : level as ThinkingLevel)
   }, [updateSetting])
 
+  const handleAutoModelFallbackChange = useCallback((enabled: boolean) => {
+    updateSetting('autoModelFallback', enabled)
+  }, [updateSetting])
+
+  const handleFallbackConnectionToggle = useCallback((slug: string, enabled: boolean) => {
+    const current = settings?.fallbackConnections ?? []
+    const next = enabled
+      ? [...current.filter(s => s !== slug), slug]
+      : current.filter(s => s !== slug)
+    updateSetting('fallbackConnections', next)
+  }, [settings?.fallbackConnections, updateSetting])
+
   // Determine if workspace has any overrides
   const hasOverrides = settings && (
     settings.defaultLlmConnection ||
     settings.model ||
-    settings.thinkingLevel
+    settings.thinkingLevel ||
+    settings.autoModelFallback === false ||
+    (settings.fallbackConnections?.length ?? 0) > 0
   )
 
   // Get display values
@@ -484,6 +500,11 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
     if (settings?.thinkingLevel) {
       const level = THINKING_LEVELS.find(l => l.id === settings.thinkingLevel)
       parts.push(level ? t(level.nameKey) : settings.thinkingLevel)
+    }
+    if (settings?.autoModelFallback === false) {
+      parts.push(t("settings.ai.modelFallbackOff"))
+    } else if ((settings?.fallbackConnections?.length ?? 0) > 0) {
+      parts.push(t("settings.ai.modelFallbackCustom"))
     }
     return parts.join(' · ')
   }
@@ -576,6 +597,62 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
                   })),
                 ]}
               />
+              <SettingsToggle
+                label={t("settings.ai.autoModelFallback")}
+                description={t("settings.ai.autoModelFallbackDesc")}
+                checked={settings?.autoModelFallback ?? true}
+                onCheckedChange={handleAutoModelFallbackChange}
+              />
+              {(settings?.autoModelFallback ?? true) && (
+                <SettingsRow
+                  label={t("settings.ai.fallbackConnections")}
+                  description={
+                    (settings?.fallbackConnections?.length ?? 0) > 0
+                      ? t("settings.ai.fallbackConnectionsDesc")
+                      : t("settings.ai.fallbackConnectionsAuto")
+                  }
+                >
+                  <div className="mt-3 space-y-2">
+                    {llmConnections.length > 1 ? (
+                      llmConnections.map((conn) => {
+                        const chain = settings?.fallbackConnections ?? []
+                        const enabled = chain.includes(conn.slug)
+                        const order = enabled ? chain.indexOf(conn.slug) + 1 : null
+                        return (
+                          <button
+                            key={conn.slug}
+                            type="button"
+                            onClick={() => handleFallbackConnectionToggle(conn.slug, !enabled)}
+                            className={cn(
+                              'w-full flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors',
+                              enabled
+                                ? 'border-primary/30 bg-primary/5'
+                                : 'border-border/60 bg-background hover:bg-foreground/[0.02]'
+                            )}
+                          >
+                            <span className="flex min-w-0 items-center gap-2">
+                              <ConnectionIcon connection={conn} className="h-4 w-4 flex-shrink-0" />
+                              <span className="truncate">{conn.name}</span>
+                              {!conn.isAuthenticated && (
+                                <span className="text-xs text-muted-foreground">
+                                  {t("settings.ai.notAuthenticated")}
+                                </span>
+                              )}
+                            </span>
+                            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-foreground/5 px-1.5 text-xs text-muted-foreground">
+                              {order ?? '+'}
+                            </span>
+                          </button>
+                        )
+                      })
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        {t("settings.ai.noFallbackConnections")}
+                      </p>
+                    )}
+                  </div>
+                </SettingsRow>
+              )}
             </div>
           </motion.div>
         )}

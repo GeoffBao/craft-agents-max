@@ -508,6 +508,10 @@ export interface WorkspaceSettings {
   localMcpEnabled?: boolean
   defaultLlmConnection?: string
   enabledSourceSlugs?: string[]
+  /** Auto-switch to a fallback connection when the current one hits quota. Default: true. */
+  autoModelFallback?: boolean
+  /** Ordered fallback connection slugs (empty = auto: any other authenticated connection). */
+  fallbackConnections?: string[]
 }
 
 // ---------------------------------------------------------------------------

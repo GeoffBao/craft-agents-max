@@ -48,6 +48,17 @@ export interface WorkspaceConfig {
     workingDirectory?: string;
     thinkingLevel?: ThinkingLevel; // Default thinking level for new sessions (default: 'medium')
     colorTheme?: string; // Color theme override for this workspace (preset ID). Undefined = inherit from app default.
+    /**
+     * Auto-switch to another LLM connection when the current one's quota/credits
+     * run out mid-session (error code 'quota_exhausted' or 'billing_error').
+     * Default: true (undefined is treated as enabled).
+     */
+    autoModelFallback?: boolean;
+    /**
+     * Ordered fallback LLM connection slugs tried (in order) on quota exhaustion.
+     * When empty/undefined, falls back to any other authenticated connection (auto).
+     */
+    fallbackConnections?: string[];
   };
 
   /**

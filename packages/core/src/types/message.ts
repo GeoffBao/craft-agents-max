@@ -460,6 +460,7 @@ export type ErrorCode =
   | 'mcp_auth_required'
   | 'mcp_unreachable'
   | 'billing_error'
+  | 'quota_exhausted'        // Provider quota/credits/balance used up (triggers auto-fallback)
   | 'model_no_tool_support'  // Model doesn't support tool/function calling
   | 'invalid_model'          // Model ID not found
   | 'data_policy_error'      // OpenRouter data policy restriction

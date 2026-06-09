@@ -173,6 +173,16 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
     ],
     canRetry: false,
   },
+  quota_exhausted: {
+    title: 'Quota Exhausted',
+    message: 'This provider has run out of quota/credits. Retrying the same model will not help — switch to another connection.',
+    actions: [
+      { key: 's', label: 'Change model', command: '/settings', action: 'settings' },
+    ],
+    // Same-connection retry is pointless; auto-fallback (if configured) switches
+    // connections server-side regardless of this flag.
+    canRetry: false,
+  },
   model_no_tool_support: {
     title: 'Model Does Not Support Tools',
     message: 'The selected model does not support tool/function calling, which is required for Craft Agent. Please choose a model with tool support (e.g., Claude, GPT-4, Gemini).',
@@ -410,6 +420,27 @@ export function parseError(
   // page would otherwise be misclassified as service_error or invalid_api_key.
   } else if (isLikelyProxyInterception(lowerMessage)) {
     code = 'proxy_error';
+  // Quota/credits/balance exhaustion — must be checked BEFORE 402/429 because providers
+  // surface it under either status (OpenAI: 429 insufficient_quota; Moonshot/Kimi &
+  // others: 402/insufficient balance). Distinct from rate_limited (transient) and
+  // billing_error (card/payment) so the server can auto-fallback to another connection.
+  } else if (
+    lowerMessage.includes('insufficient_quota') ||
+    lowerMessage.includes('insufficient quota') ||
+    lowerMessage.includes('exceeded your current quota') ||
+    lowerMessage.includes('quota exceeded') ||
+    lowerMessage.includes('out of credits') ||
+    lowerMessage.includes('no credits') ||
+    lowerMessage.includes('insufficient_balance') ||
+    lowerMessage.includes('insufficient balance') ||
+    lowerMessage.includes('balance is insufficient') ||
+    lowerMessage.includes('not enough balance') ||
+    lowerMessage.includes('余额不足') ||
+    lowerMessage.includes('额度不足') ||
+    lowerMessage.includes('配额不足') ||
+    lowerMessage.includes('欠费')
+  ) {
+    code = 'quota_exhausted';
   // Check for specific HTTP status codes or patterns
   } else if (lowerMessage.includes('402') || lowerMessage.includes('payment required')) {
     code = 'billing_error';
