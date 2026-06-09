@@ -4,8 +4,8 @@
  * Derived data only — safe to delete and rebuild.
  */
 
-import { Database } from 'bun:sqlite';
 import { existsSync, mkdirSync, readdirSync, readFileSync } from 'fs';
+import { openIndexDatabase, type IndexDatabase } from './session-indexer-db.ts';
 import { join } from 'path';
 import { getWorkspaceSessionsPath } from '@craft-agent/shared/workspaces';
 import { getSessionFilePath, readSessionHeader } from '@craft-agent/shared/sessions';
@@ -30,7 +30,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
 `;
 
 export class SessionIndexManager {
-  private db: Database;
+  private db: IndexDatabase;
   private workspaceRootPath: string;
 
   constructor(workspaceRootPath: string) {
@@ -40,7 +40,7 @@ export class SessionIndexManager {
       mkdirSync(indexDir, { recursive: true });
     }
     const dbPath = join(indexDir, 'sessions-fts.sqlite');
-    this.db = new Database(dbPath);
+    this.db = openIndexDatabase(dbPath);
     this.db.exec('PRAGMA journal_mode = WAL;');
     this.db.exec(SCHEMA);
   }

@@ -6,6 +6,19 @@
  */
 
 import { loadWorkspaceConfig } from '../workspaces/storage.ts';
+import {
+  type AgentLearningWorkspaceConfig,
+  defaultAgentLearningWorkspaceConfig,
+  normalizeAgentLearningWorkspaceConfig,
+  mergeAgentLearningWorkspacePatch,
+} from './workspace-settings.ts';
+
+export type { AgentLearningWorkspaceConfig };
+export {
+  defaultAgentLearningWorkspaceConfig,
+  normalizeAgentLearningWorkspaceConfig,
+  mergeAgentLearningWorkspacePatch,
+};
 
 function getEnv(key: string): string | undefined {
   if (typeof process !== 'undefined' && process.env) return process.env[key];
@@ -18,20 +31,6 @@ function parseBooleanEnv(value: string | undefined): boolean | undefined {
   if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
   if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
   return undefined;
-}
-
-export interface AgentLearningWorkspaceConfig {
-  /** Master switch for agent learning features. */
-  enabled?: boolean;
-  persistentMemory?: boolean;
-  sessionRecall?: boolean;
-  skillDrafts?: boolean;
-  promptIntelligence?: boolean;
-  contextCompression?: boolean;
-  learningNudge?: boolean;
-  compactionMemoryFlush?: boolean;
-  heartbeat?: boolean;
-  observability?: boolean;
 }
 
 export interface AgentLearningConfig {
@@ -110,50 +109,6 @@ export function resolveAgentLearningConfig(workspaceRootPath?: string): AgentLea
     heartbeat: flag('heartbeat'),
     observability: flag('observability'),
   };
-}
-
-/**
- * Return agent-learning tool names that should be exposed for this config.
- */
-/** Defaults for workspace UI — sub-features on when master switch is enabled. */
-export function defaultAgentLearningWorkspaceConfig(): AgentLearningWorkspaceConfig {
-  return {
-    enabled: false,
-    persistentMemory: true,
-    sessionRecall: true,
-    skillDrafts: true,
-    promptIntelligence: true,
-    contextCompression: true,
-    learningNudge: true,
-    compactionMemoryFlush: true,
-    heartbeat: false,
-    observability: true,
-  };
-}
-
-export function normalizeAgentLearningWorkspaceConfig(
-  block?: AgentLearningWorkspaceConfig,
-): AgentLearningWorkspaceConfig {
-  const defaults = defaultAgentLearningWorkspaceConfig();
-  return {
-    enabled: block?.enabled ?? defaults.enabled,
-    persistentMemory: block?.persistentMemory ?? defaults.persistentMemory,
-    sessionRecall: block?.sessionRecall ?? defaults.sessionRecall,
-    skillDrafts: block?.skillDrafts ?? defaults.skillDrafts,
-    promptIntelligence: block?.promptIntelligence ?? defaults.promptIntelligence,
-    contextCompression: block?.contextCompression ?? defaults.contextCompression,
-    learningNudge: block?.learningNudge ?? defaults.learningNudge,
-    compactionMemoryFlush: block?.compactionMemoryFlush ?? defaults.compactionMemoryFlush,
-    heartbeat: block?.heartbeat ?? defaults.heartbeat,
-    observability: block?.observability ?? defaults.observability,
-  };
-}
-
-export function mergeAgentLearningWorkspacePatch(
-  current: AgentLearningWorkspaceConfig | undefined,
-  patch: Partial<AgentLearningWorkspaceConfig>,
-): AgentLearningWorkspaceConfig {
-  return normalizeAgentLearningWorkspaceConfig({ ...current, ...patch });
 }
 
 export function getEnabledAgentLearningTools(config: AgentLearningConfig): Set<AgentLearningToolName> {

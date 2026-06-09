@@ -1,4 +1,5 @@
 export * from './config.ts';
+export * from './workspace-settings.ts';
 export * from './merge-guardrails.ts';
 export * from './learning-nudge.ts';
 export * from './heartbeat.ts';
