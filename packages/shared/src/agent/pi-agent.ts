@@ -45,7 +45,19 @@ import { EventQueue } from './backend/event-queue.ts';
 
 // System prompt for Craft Agent context
 import { getSystemPrompt } from '../prompts/system.ts';
+import { buildAgentLearningPromptBundle } from './agent-learning-prompt.ts';
+import { attachAgentLearningBindings } from './agent-learning-bindings.ts';
+import {
+  createLoopRecoveryTracker,
+  buildLoopRecoveryUserMessage,
+  MAX_LOOP_RECOVERY_DEPTH,
+} from './loop-recovery.ts';
+import {
+  resolveAgentLearningConfig,
+  getEnabledAgentLearningTools,
+} from '../agent-learning/config.ts';
 import { getCoAuthorPreference } from '../config/preferences.ts';
+import { FEATURE_FLAGS } from '../feature-flags.ts';
 
 // Credential manager for token storage
 import { getCredentialManager } from '../credentials/manager.ts';
@@ -289,6 +301,7 @@ export class PiAgent extends BaseAgent {
 
   // Cached session tool context (lazy-created on first session tool call)
   private _sessionToolContext: SessionToolContext | null = null;
+  private pinnedAgentLearningAppendix: string | null = null;
 
   // RPC request counter for unique IDs
   private rpcIdCounter: number = 0;
@@ -548,7 +561,13 @@ export class PiAgent extends BaseAgent {
     // These tools (SubmitPlan, config_validate, source auth, call_llm, etc.)
     // are executed in the main process when the LLM calls them.
     this.assertBackendSessionToolParity();
-    let sessionToolDefs = getSessionToolProxyDefs();
+    const learningConfig = resolveAgentLearningConfig(this.config.workspace.rootPath);
+    const enabledLearningTools = getEnabledAgentLearningTools(learningConfig);
+    let sessionToolDefs = getSessionToolProxyDefs({
+      includeDeveloperFeedback: FEATURE_FLAGS.developerFeedback,
+      includeAgentLearning: learningConfig.enabled,
+      enabledAgentLearningTools: enabledLearningTools,
+    });
 
     // Mirror Claude's gate: hide `browser_tool` when the user has disabled
     // the built-in browser tool. Without this filter, Pi would still advertise
@@ -1463,6 +1482,10 @@ export class PiAgent extends BaseAgent {
 
     // Attach session self-management bindings (lazy getters from callback registry)
     attachSessionSelfManagementBindings(this._sessionToolContext, sessionId);
+    const learningConfig = resolveAgentLearningConfig(this.config.workspace.rootPath);
+    if (learningConfig.enabled) {
+      attachAgentLearningBindings(this._sessionToolContext, sessionId, this.config.workspace.rootPath);
+    }
 
     return this._sessionToolContext;
   }
@@ -1992,6 +2015,17 @@ export class PiAgent extends BaseAgent {
       }
 
       // Build system prompt
+      if (this.pinnedAgentLearningAppendix === null) {
+        const bundle = buildAgentLearningPromptBundle({
+          workspaceRootPath: this.config.workspace.rootPath,
+          workingDirectory: this.config.session?.workingDirectory,
+          providerId: this.config.connectionSlug,
+          modelId: this.config.model,
+          backendName: 'Craft Agents Backend',
+        });
+        this.pinnedAgentLearningAppendix = bundle.appendix;
+      }
+
       const systemPrompt = getSystemPrompt(
         undefined, // pinnedPreferencesPrompt
         this.config.debugMode,
@@ -1999,7 +2033,8 @@ export class PiAgent extends BaseAgent {
         this.config.session?.workingDirectory,
         this.config.systemPromptPreset,
         'Craft Agents Backend', // backendName
-        getCoAuthorPreference() // respect user's includeCoAuthoredBy preference (#576)
+        getCoAuthorPreference(), // respect user's includeCoAuthoredBy preference (#576)
+        this.pinnedAgentLearningAppendix ?? undefined,
       );
 
       // Build context from sources
@@ -2073,8 +2108,11 @@ export class PiAgent extends BaseAgent {
       // up new proxy tools on the next handlePrompt, so the restart is needed
       // here too. Without the drain, sibling tool_results from parallel
       // source_test calls are lost (#790).
+      const loopRecoveryDepth = options?.loopRecoveryDepth ?? 0;
+      const loopTracker = createLoopRecoveryTracker();
       const sourceActivationDrain = new SourceActivationDrainController('fire-on-non-tool-result');
       for await (const event of this.eventQueue.drain()) {
+        loopTracker.observe(event);
         // Pre-yield check: when we're past capture and the incoming event is
         // not a tool_result, fire BEFORE yielding it (the event belongs to
         // the about-to-be-aborted next turn — letting it through would leak
@@ -2103,6 +2141,48 @@ export class PiAgent extends BaseAgent {
         yield sourceActivationFireAtEnd;
         this.forceAbort(AbortReason.SourceActivated);
         return;
+      }
+
+      const loopRecoveryKind = loopTracker.resolveLoopRecoveryKind();
+      if (
+        loopRecoveryKind
+        && !this.abortReason
+        && loopRecoveryDepth < MAX_LOOP_RECOVERY_DEPTH
+      ) {
+        this.debug(`Loop recovery (${loopRecoveryKind}) — sending continuation nudge`);
+        yield {
+          type: 'info',
+          message: `Model stalled (${loopRecoveryKind}) — nudging follow-up...`,
+        };
+        const continuationTurnId = `turn-${++this.rpcIdCounter}`;
+        this.send({
+          type: 'prompt',
+          id: continuationTurnId,
+          message: buildLoopRecoveryUserMessage(loopRecoveryKind),
+          systemPrompt: fullSystemPrompt,
+        });
+        const continuationDrain = new SourceActivationDrainController('fire-on-non-tool-result');
+        for await (const event of this.eventQueue.drain()) {
+          const preFire = continuationDrain.shouldFireBeforeEvent(event);
+          if (preFire) {
+            this.debug(`source_test activated "${preFire.sourceSlug}", continuation drain restarting turn`);
+            yield preFire;
+            this.forceAbort(AbortReason.SourceActivated);
+            return;
+          }
+          if (continuationDrain.observe(event, () => this.consumePendingSourceActivationRestart())) {
+            yield event;
+            continue;
+          }
+          yield event;
+        }
+        const continuationFireAtEnd = continuationDrain.shouldFireAtBoundary();
+        if (continuationFireAtEnd) {
+          this.debug(`source_test activated "${continuationFireAtEnd.sourceSlug}", continuation stream ended with pending restart`);
+          yield continuationFireAtEnd;
+          this.forceAbort(AbortReason.SourceActivated);
+          return;
+        }
       }
     } catch (error) {
       if (error instanceof Error && error.message.includes('abort')) {

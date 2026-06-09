@@ -498,6 +498,19 @@ export interface UpdateInfo {
 // Workspace types
 // ---------------------------------------------------------------------------
 
+export interface AgentLearningWorkspaceSettings {
+  enabled?: boolean
+  persistentMemory?: boolean
+  sessionRecall?: boolean
+  skillDrafts?: boolean
+  promptIntelligence?: boolean
+  contextCompression?: boolean
+  learningNudge?: boolean
+  compactionMemoryFlush?: boolean
+  heartbeat?: boolean
+  observability?: boolean
+}
+
 export interface WorkspaceSettings {
   name?: string
   model?: string
@@ -512,6 +525,8 @@ export interface WorkspaceSettings {
   autoModelFallback?: boolean
   /** Ordered fallback connection slugs (empty = auto: any other authenticated connection). */
   fallbackConnections?: string[]
+  /** Hermes/OpenClaw-style agent learning — persisted in workspace config.json */
+  agentLearning?: AgentLearningWorkspaceSettings
 }
 
 // ---------------------------------------------------------------------------

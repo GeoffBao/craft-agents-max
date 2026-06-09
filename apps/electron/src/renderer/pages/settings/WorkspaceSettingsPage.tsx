@@ -23,7 +23,8 @@ import { cn } from '@/lib/utils'
 import { routes } from '@/lib/navigate'
 import { Spinner } from '@craft-agent/ui'
 import { RenameDialog } from '@/components/ui/rename-dialog'
-import type { PermissionMode, WorkspaceSettings, LoadedSource } from '../../../shared/types'
+import type { PermissionMode, WorkspaceSettings, LoadedSource, AgentLearningWorkspaceSettings } from '../../../shared/types'
+import { defaultAgentLearningWorkspaceConfig, mergeAgentLearningWorkspacePatch, normalizeAgentLearningWorkspaceConfig } from '@craft-agent/shared/agent-learning'
 import { useDirectoryPicker } from '@/hooks/useDirectoryPicker'
 import { ServerDirectoryBrowser } from '@/components/ServerDirectoryBrowser'
 import { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/mode-types'
@@ -65,6 +66,9 @@ export default function WorkspaceSettingsPage() {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('ask')
   const [workingDirectory, setWorkingDirectory] = useState('')
   const [localMcpEnabled, setLocalMcpEnabled] = useState(true)
+  const [agentLearning, setAgentLearning] = useState<AgentLearningWorkspaceSettings>(
+    () => defaultAgentLearningWorkspaceConfig(),
+  )
   const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(true)
 
   // Default sources state
@@ -92,6 +96,7 @@ export default function WorkspaceSettingsPage() {
           setPermissionMode(settings.permissionMode || 'ask')
           setWorkingDirectory(settings.workingDirectory || '')
           setLocalMcpEnabled(settings.localMcpEnabled ?? true)
+          setAgentLearning(normalizeAgentLearningWorkspaceConfig(settings.agentLearning))
           // Load cyclable permission modes from workspace settings
           if (settings.cyclablePermissionModes && settings.cyclablePermissionModes.length >= 2) {
             setEnabledModes(settings.cyclablePermissionModes)
@@ -280,6 +285,15 @@ export default function WorkspaceSettingsPage() {
       await updateWorkspaceSetting('localMcpEnabled', enabled)
     },
     [updateWorkspaceSetting]
+  )
+
+  const handleAgentLearningPatch = useCallback(
+    async (patch: Partial<AgentLearningWorkspaceSettings>) => {
+      const next = mergeAgentLearningWorkspacePatch(agentLearning, patch)
+      setAgentLearning(next)
+      await updateWorkspaceSetting('agentLearning', next)
+    },
+    [agentLearning, updateWorkspaceSetting],
   )
 
   const handleSourceToggle = useCallback(
@@ -510,6 +524,67 @@ export default function WorkspaceSettingsPage() {
               ) : (
                 <p className="text-sm text-muted-foreground">{t("settings.workspace.noSourcesConfigured")}</p>
               )}
+            </SettingsSection>
+
+            {/* Agent Learning */}
+            <SettingsSection
+              title={t("settings.workspace.agentLearning")}
+              description={t("settings.workspace.agentLearningDesc")}
+            >
+              <SettingsCard>
+                <SettingsToggle
+                  label={t("settings.workspace.agentLearningEnabled")}
+                  description={t("settings.workspace.agentLearningEnabledDesc")}
+                  checked={agentLearning.enabled ?? false}
+                  onCheckedChange={(checked) => handleAgentLearningPatch({ enabled: checked })}
+                />
+                {agentLearning.enabled && (
+                  <>
+                    <SettingsToggle
+                      label={t("settings.workspace.agentLearningMemory")}
+                      description={t("settings.workspace.agentLearningMemoryDesc")}
+                      checked={agentLearning.persistentMemory ?? true}
+                      onCheckedChange={(checked) => handleAgentLearningPatch({ persistentMemory: checked })}
+                    />
+                    <SettingsToggle
+                      label={t("settings.workspace.agentLearningRecall")}
+                      description={t("settings.workspace.agentLearningRecallDesc")}
+                      checked={agentLearning.sessionRecall ?? true}
+                      onCheckedChange={(checked) => handleAgentLearningPatch({ sessionRecall: checked })}
+                    />
+                    <SettingsToggle
+                      label={t("settings.workspace.agentLearningSkills")}
+                      description={t("settings.workspace.agentLearningSkillsDesc")}
+                      checked={agentLearning.skillDrafts ?? true}
+                      onCheckedChange={(checked) => handleAgentLearningPatch({ skillDrafts: checked })}
+                    />
+                    <SettingsToggle
+                      label={t("settings.workspace.agentLearningPrompt")}
+                      description={t("settings.workspace.agentLearningPromptDesc")}
+                      checked={agentLearning.promptIntelligence ?? true}
+                      onCheckedChange={(checked) => handleAgentLearningPatch({ promptIntelligence: checked })}
+                    />
+                    <SettingsToggle
+                      label={t("settings.workspace.agentLearningCompression")}
+                      description={t("settings.workspace.agentLearningCompressionDesc")}
+                      checked={agentLearning.contextCompression ?? true}
+                      onCheckedChange={(checked) => handleAgentLearningPatch({ contextCompression: checked })}
+                    />
+                    <SettingsToggle
+                      label={t("settings.workspace.agentLearningNudge")}
+                      description={t("settings.workspace.agentLearningNudgeDesc")}
+                      checked={agentLearning.learningNudge ?? true}
+                      onCheckedChange={(checked) => handleAgentLearningPatch({ learningNudge: checked })}
+                    />
+                    <SettingsToggle
+                      label={t("settings.workspace.agentLearningHeartbeat")}
+                      description={t("settings.workspace.agentLearningHeartbeatDesc")}
+                      checked={agentLearning.heartbeat ?? false}
+                      onCheckedChange={(checked) => handleAgentLearningPatch({ heartbeat: checked })}
+                    />
+                  </>
+                )}
+              </SettingsCard>
             </SettingsSection>
 
             {/* Advanced */}

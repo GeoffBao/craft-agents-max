@@ -72,3 +72,17 @@ export { handleGetSessionInfo } from './get-session-info.ts';
 export type { GetSessionInfoArgs } from './get-session-info.ts';
 export { handleListSessions } from './list-sessions.ts';
 export type { ListSessionsArgs } from './list-sessions.ts';
+
+// Agent Learning
+export { handleMemory } from './memory.ts';
+export type { MemoryArgs, MemoryAction, MemoryTarget, MemoryOperationResult } from './memory.ts';
+export { handleSessionSearch } from './session-search.ts';
+export type { SessionSearchArgs, SessionSearchHit, SessionSearchResult } from './session-search.ts';
+export { handleSkillView } from './skill-view.ts';
+export type { SkillViewArgs, SkillViewResult } from './skill-view.ts';
+export { handleProposeSkill } from './propose-skill.ts';
+export type { ProposeSkillArgs } from './propose-skill.ts';
+export { handleSkillManage } from './skill-manage.ts';
+export type { SkillManageArgs } from './skill-manage.ts';
+export { handleCompressContext } from './compress-context.ts';
+export type { CompressContextArgs } from './compress-context.ts';

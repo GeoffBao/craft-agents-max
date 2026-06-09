@@ -18,6 +18,7 @@
     "./handlers/rpc": "./src/handlers/rpc/index.ts",
     "./handlers/rpc/*": "./src/handlers/rpc/*.ts",
     "./sessions": "./src/sessions/index.ts",
+    "./memory": "./src/memory/index.ts",
     "./webui": "./src/webui/index.ts"
   },
   "scripts": {
@@ -26,6 +27,7 @@
   "dependencies": {
     "@craft-agent/core": "workspace:*",
     "@craft-agent/shared": "workspace:*",
+    "@craft-agent/session-tools-core": "workspace:*",
     "jose": "^6.0.0",
     "ws": "^8.19.0",
     "sharp": "0.34.5",

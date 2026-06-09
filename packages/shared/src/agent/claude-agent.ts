@@ -8,6 +8,7 @@ type ContentBlockParam =
   | { type: 'document'; source: { type: 'base64'; media_type: string; data: string } };
 import { z } from 'zod';
 import { getSystemPrompt } from '../prompts/system.ts';
+import { buildAgentLearningPromptBundle } from './agent-learning-prompt.ts';
 import { BaseAgent, type MiniAgentConfig, MINI_AGENT_TOOLS, MINI_AGENT_MCP_KEYS } from './base-agent.ts';
 import type { BackendConfig, PostInitResult, PermissionRequestType, SdkMcpServerConfig } from './backend/types.ts';
 // Plan types are used by UI components; not needed in craft-agent.ts since Safe Mode is user-controlled
@@ -31,6 +32,11 @@ import { consumeLlmQueryMessages } from './claude-llm-query.ts';
 import { debug } from '../utils/debug.ts';
 import { guardLargeResult } from '../utils/large-response.ts';
 import { SourceActivationDrainController } from './source-activation-drain.ts';
+import {
+  createLoopRecoveryTracker,
+  buildLoopRecoveryUserMessage,
+  MAX_LOOP_RECOVERY_DEPTH,
+} from './loop-recovery.ts';
 import {
   getSessionPlansDir,
   getLastPlanFilePath,
@@ -489,6 +495,7 @@ export class ClaudeAgent extends BaseAgent {
   // Pinned system prompt components (captured on first chat, used for consistency after compaction)
   private pinnedPreferencesPrompt: string | null = null;
   private pinnedIncludeCoAuthoredBy: boolean | null = null;
+  private pinnedAgentLearningAppendix: string | null = null;
   // Track if preference drift notification has been shown this session
   private preferencesDriftNotified: boolean = false;
   // Captured stderr from SDK subprocess (for error diagnostics when process exits with code 1)
@@ -796,10 +803,11 @@ export class ClaudeAgent extends BaseAgent {
   protected async *chatImpl(
     userMessage: string,
     attachments?: FileAttachment[],
-    options?: ChatOptions
+    chatOptions?: ChatOptions
   ): AsyncGenerator<AgentEvent> {
     // Extract options (ChatOptions interface from AgentBackend)
-    const _isRetry = options?.isRetry ?? false;
+    const _isRetry = chatOptions?.isRetry ?? false;
+    const loopRecoveryDepth = chatOptions?.loopRecoveryDepth ?? 0;
 
     // Clear any leftover steer from a previous turn (safety net — should already be null)
     this.pendingSteerMessage = null;
@@ -816,6 +824,13 @@ export class ClaudeAgent extends BaseAgent {
         // First chat in this session - pin current values
         this.pinnedPreferencesPrompt = currentPreferencesPrompt;
         this.pinnedIncludeCoAuthoredBy = currentCoAuthorPref;
+        const learningBundle = buildAgentLearningPromptBundle({
+          workspaceRootPath: this.workspaceRootPath,
+          workingDirectory: this.config.session?.workingDirectory,
+          providerId: this.config.connectionSlug,
+          modelId: this.config.model,
+        });
+        this.pinnedAgentLearningAppendix = learningBundle.appendix;
         debug('[chat] Pinned system prompt components for session consistency');
       } else {
         // Detect drift: warn user if context has changed since session started
@@ -998,7 +1013,8 @@ export class ClaudeAgent extends BaseAgent {
                 this.config.session?.workingDirectory,
                 undefined, // preset
                 undefined, // backendName
-                this.pinnedIncludeCoAuthoredBy ?? undefined
+                this.pinnedIncludeCoAuthoredBy ?? undefined,
+                this.pinnedAgentLearningAppendix ?? undefined,
               ),
             },
         // Use sdkCwd for SDK session storage - this is set once at session creation and never changes.
@@ -1446,6 +1462,7 @@ This is a branched conversation. All prior messages in this conversation are par
       // `source_activated` + `forceAbort` — otherwise the session journal
       // ends up with orphan `tool_use` IDs that block subsequent sends.
       const sourceActivationDrain = new SourceActivationDrainController('batch-boundary');
+      const loopTracker = createLoopRecoveryTracker();
       try {
         for await (const message of this.currentQuery) {
           // Track if we got any text content from assistant
@@ -1479,6 +1496,7 @@ This is a branched conversation. All prior messages in this conversation are par
 
           const events = await this.eventAdapter.adapt(message);
           for (const event of events) {
+            loopTracker.observe(event);
             // After source_test (or any session-scoped tool) successfully activates a
             // new source, activateSourceInSessionFn stashes a restart descriptor on the
             // agent. The drain controller captures the descriptor on the first
@@ -1642,6 +1660,20 @@ This is a branched conversation. All prior messages in this conversation are par
           this.onDebug?.(`source_test activated "${sourceActivationFireAtEnd.sourceSlug}", stream ended mid-batch, restarting turn`);
           yield sourceActivationFireAtEnd;
           this.forceAbort(AbortReason.SourceActivated);
+          return;
+        }
+
+        const loopRecoveryKind = loopTracker.resolveLoopRecoveryKind();
+        if (loopRecoveryKind && loopRecoveryDepth < MAX_LOOP_RECOVERY_DEPTH) {
+          debug(`[chat] Loop recovery (${loopRecoveryKind}) — sending continuation nudge`);
+          yield {
+            type: 'info',
+            message: `Model stalled (${loopRecoveryKind}) — nudging follow-up...`,
+          };
+          yield* this.chat(buildLoopRecoveryUserMessage(loopRecoveryKind), attachments, {
+            loopRecoveryDepth: loopRecoveryDepth + 1,
+            thinkingOverride: chatOptions?.thinkingOverride,
+          });
           return;
         }
 

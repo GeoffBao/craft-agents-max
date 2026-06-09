@@ -116,6 +116,7 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       enabledSourceSlugs: config?.defaults?.enabledSourceSlugs ?? [],
       autoModelFallback: config?.defaults?.autoModelFallback,
       fallbackConnections: config?.defaults?.fallbackConnections ?? [],
+      agentLearning: config?.agentLearning,
     }
   })
 
@@ -127,7 +128,7 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       : value
 
     // Validate key is a known workspace setting
-    const validKeys = ['name', 'model', 'enabledSourceSlugs', 'permissionMode', 'cyclablePermissionModes', 'thinkingLevel', 'workingDirectory', 'localMcpEnabled', 'defaultLlmConnection', 'autoModelFallback', 'fallbackConnections']
+    const validKeys = ['name', 'model', 'enabledSourceSlugs', 'permissionMode', 'cyclablePermissionModes', 'thinkingLevel', 'workingDirectory', 'localMcpEnabled', 'defaultLlmConnection', 'autoModelFallback', 'fallbackConnections', 'agentLearning']
     if (!validKeys.includes(key)) {
       throw new Error(`Invalid workspace setting key: ${key}. Valid keys: ${validKeys.join(', ')}`)
     }
@@ -160,6 +161,11 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       // Store in localMcpServers.enabled (top-level, not in defaults)
       config.localMcpServers = config.localMcpServers || { enabled: true }
       config.localMcpServers.enabled = Boolean(normalizedValue)
+    } else if (key === 'agentLearning') {
+      if (normalizedValue !== undefined && normalizedValue !== null && typeof normalizedValue !== 'object') {
+        throw new Error('agentLearning must be an object')
+      }
+      config.agentLearning = normalizedValue as typeof config.agentLearning
     } else {
       // Update the setting in defaults
       config.defaults = config.defaults || {}

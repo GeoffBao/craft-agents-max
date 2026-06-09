@@ -350,7 +350,8 @@ export function getSystemPrompt(
   workingDirectory?: string,
   preset?: SystemPromptPreset | string,
   backendName?: string,
-  includeCoAuthoredBy?: boolean
+  includeCoAuthoredBy?: boolean,
+  agentLearningAppendix?: string,
 ): string {
   // Use mini agent prompt for quick edits (pass workspace root for config paths)
   if (preset === 'mini') {
@@ -373,7 +374,8 @@ export function getSystemPrompt(
   // to enable prompt caching. The system prompt stays static and cacheable.
   // Safe Mode context is also in user messages for the same reason.
   const basePrompt = getCraftAssistantPrompt(workspaceRootPath, backendName, resolvedIncludeCoAuthoredBy);
-  const fullPrompt = `${basePrompt}${preferences}${debugContext}${projectContextFiles}`;
+  const learningBlock = agentLearningAppendix ?? '';
+  const fullPrompt = `${basePrompt}${preferences}${debugContext}${projectContextFiles}${learningBlock}`;
 
   debug('[getSystemPrompt] full prompt length:', fullPrompt.length);
 

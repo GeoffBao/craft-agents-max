@@ -387,6 +387,55 @@ export interface SessionToolContext {
    * Used by transform_data and render_template for output files.
    */
   dataPath?: string;
+
+  // ============================================================
+  // Agent Learning (memory, recall, skill drafts, compression)
+  // ============================================================
+
+  /** Apply a memory file operation (injected by shared agent-learning bindings). */
+  applyMemoryOperation?(args: {
+    action: 'add' | 'replace' | 'remove';
+    target: 'user' | 'memory' | 'project';
+    content: string;
+    key?: string;
+  }): Promise<{ ok: boolean; message: string }> | { ok: boolean; message: string };
+
+  /** Search indexed session history (injected via SessionManager callback). */
+  sessionSearch?(options: {
+    query: string;
+    limit?: number;
+    sessionId?: string;
+    cursor?: string;
+    workspacePath: string;
+  }): Promise<import('./handlers/session-search.ts').SessionSearchResult>;
+
+  /** Notify when a skill draft is written (optional observability hook). */
+  onSkillDraftProposed?(draft: { slug: string; path: string; title: string }): void;
+
+  /** Return conversation messages for compression analysis. */
+  getConversationMessages?(): Promise<Array<{
+    role: 'user' | 'assistant' | 'tool';
+    content: string;
+    toolName?: string;
+    isIntermediate?: boolean;
+  }>>;
+
+  /** Analyze whether context compression is recommended (JSON string). */
+  analyzeContextCompression?(options: {
+    tokenThreshold?: number;
+    dryRun?: boolean;
+  }): Promise<string>;
+
+  /** Load full skill content for skill_view (production + drafts). */
+  viewSkill?(skillSlug: string): Promise<import('./handlers/skill-view.ts').SkillViewResult | null>;
+
+  /** Patch an existing draft skill under skills/.drafts/ only. */
+  manageSkillDraft?(args: {
+    skillSlug: string;
+    action: 'append' | 'replace_section';
+    content: string;
+    section?: string;
+  }): Promise<{ ok: boolean; message: string; path?: string }>;
 }
 
 // ============================================================

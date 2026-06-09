@@ -85,6 +85,16 @@ import { type Session, type SessionEvent, type FileAttachment, type SendMessageO
 import { messageToStored, storedToMessage, type Message, type StoredAttachment, type ToolDisplayMeta } from '@craft-agent/core/types'
 import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment, selectSpreadMessages, normalizePath } from '@craft-agent/shared/utils'
 import { loadAllSkills, loadSkillBySlug, invalidateSkillsCache, type LoadedSkill } from '@craft-agent/shared/skills'
+import { resolveAgentLearningConfig } from '@craft-agent/shared/agent-learning'
+import {
+  createSessionSearchFn,
+  emitSessionEndLearningSignals,
+  evaluatePreCompactLearningInfoMessage,
+  indexSessionForRecall,
+} from '../memory/agent-learning-hooks.ts'
+import { logAgentLearningEvent } from '../memory/observability.ts'
+import { runBackgroundReviewInWorker } from '../memory/background-review-worker.ts'
+import { formatLearningNudgeInfoMessage } from '@craft-agent/shared/agent-learning'
 import { invalidateContextFileCache } from '@craft-agent/shared/prompts/system'
 import { getToolIconsDir, getMiniModel } from '@craft-agent/shared/config'
 import { getDefaultSummarizationModel } from '@craft-agent/shared/config/models'
@@ -845,6 +855,8 @@ interface ManagedSession {
   lastFinalMessageId?: string
   // Turn baseline: last final assistant message ID at turn start (runtime-only, not persisted)
   turnStartFinalMessageId?: string
+  /** Runtime-only: suppress duplicate PreCompact learning info per compaction cycle */
+  preCompactLearningNudgeEmitted?: boolean
   // External session metadata updates seen while processing (applied after turn stop)
   pendingExternalMetadata?: SessionHeader
   // Guard: suppress external metadata revert after programmatic writes (setSessionStatus/setSessionLabels).
@@ -1905,6 +1917,26 @@ export class SessionManager implements ISessionManager {
   // atomic write completes. See onSessionMetadataChange.
   private setMetadataWriteGuard(managed: ManagedSession): void {
     managed._metadataWriteGuardUntil = Date.now() + METADATA_WRITE_GUARD_MS
+  }
+
+  /** Append a persistent learning info message and flush to disk. */
+  private appendLearningInfoMessage(managed: ManagedSession, text: string): void {
+    const infoMessage: Message = {
+      id: generateMessageId(),
+      role: 'info',
+      content: text,
+      timestamp: this.monotonic(),
+      infoLevel: 'info',
+    }
+    managed.messages.push(infoMessage)
+    this.sendEvent({
+      type: 'info',
+      sessionId: managed.id,
+      message: text,
+      level: 'info',
+      timestamp: infoMessage.timestamp,
+    }, managed.workspace.id)
+    this.persistSession(managed)
   }
 
   /**
@@ -4177,6 +4209,27 @@ export class SessionManager implements ISessionManager {
 
           await this.sendMessage(sessionId, message, fileAttachments)
         },
+        sessionSearchFn: createSessionSearchFn(managed.workspace.rootPath),
+        getConversationMessagesFn: async () => {
+          return managed.messages
+            .filter(m => m.role === 'user' || m.role === 'assistant')
+            .map(m => ({
+              role: m.role as 'user' | 'assistant',
+              content: m.content,
+              toolName: m.toolName,
+              isIntermediate: m.isIntermediate,
+            }))
+        },
+        onSkillDraftProposedFn: (draft) => {
+          const cfg = resolveAgentLearningConfig(managed.workspace.rootPath)
+          if (cfg.observability) {
+            logAgentLearningEvent({
+              type: 'skill_draft',
+              sessionId: managed.id,
+              payload: draft,
+            })
+          }
+        },
         activateSourceInSessionFn: async (sourceSlug: string) => {
           const cb = managed.agent?.onSourceActivationRequest
           if (!cb) {
@@ -5382,6 +5435,16 @@ export class SessionManager implements ISessionManager {
     // Cancel any pending persistence write (session is being deleted, no need to save)
     sessionPersistenceQueue.cancel(sessionId)
 
+    emitSessionEndLearningSignals(
+      workspaceRootPath,
+      sessionId,
+      managed.messages.map(m => ({
+        role: m.role,
+        content: m.content,
+        isIntermediate: m.isIntermediate,
+      })),
+    )
+
     // Clean up session-scoped tool callbacks to prevent memory accumulation
     unregisterSessionScopedToolCallbacks(sessionId)
 
@@ -6500,7 +6563,28 @@ export class SessionManager implements ISessionManager {
       }, managed.workspace.id)
     }
 
-    // 6. Always persist
+    // 6. Background learning review (non-blocking, suggest-only)
+    if (reason === 'complete' && didReceiveNewFinalMessage) {
+      indexSessionForRecall(managed.workspace.rootPath, sessionId)
+      void runBackgroundReviewInWorker({
+        workspace: managed.workspace,
+        sessionId,
+        messages: managed.messages.map(m => ({ role: m.role, content: m.content })),
+        llmConnection: managed.llmConnection,
+        model: managed.model,
+        workingDirectory: managed.workingDirectory,
+        sdkCwd: managed.sdkCwd,
+        buildHostRuntime: buildBackendHostRuntimeContext,
+      }).then((suggestion) => {
+        const current = this.sessions.get(sessionId)
+        if (!suggestion || !current) return
+        const text = formatLearningNudgeInfoMessage(suggestion)
+        if (!text) return
+        this.appendLearningInfoMessage(current, text)
+      })
+    }
+
+    // 7. Always persist
     this.persistSession(managed)
   }
 
@@ -7354,14 +7438,31 @@ export class SessionManager implements ISessionManager {
         break
       }
 
-      case 'status':
+      case 'status': {
+        const isCompacting = event.message.includes('Compacting')
+        if (isCompacting && !managed.preCompactLearningNudgeEmitted) {
+          const preCompactText = evaluatePreCompactLearningInfoMessage(
+            managed.workspace.rootPath,
+            sessionId,
+            managed.messages.map(m => ({
+              role: m.role,
+              content: m.content,
+              isIntermediate: m.isIntermediate,
+            })),
+          )
+          if (preCompactText) {
+            managed.preCompactLearningNudgeEmitted = true
+            this.appendLearningInfoMessage(managed, preCompactText)
+          }
+        }
         this.sendEvent({
           type: 'status',
           sessionId,
           message: event.message,
-          statusType: event.message.includes('Compacting') ? 'compacting' : undefined
+          statusType: isCompacting ? 'compacting' : undefined,
         }, workspaceId)
         break
+      }
 
       case 'info': {
         const isCompactionComplete = event.message.startsWith('Compacted')
@@ -7370,6 +7471,7 @@ export class SessionManager implements ISessionManager {
         // Persist compaction messages so they survive reload
         // Other info messages are transient (just sent to renderer)
         if (isCompactionComplete) {
+          managed.preCompactLearningNudgeEmitted = false
           const compactionMessage: Message = {
             id: generateMessageId(),
             role: 'info',

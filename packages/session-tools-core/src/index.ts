@@ -183,6 +183,12 @@ export type {
   ScriptSandboxArgs,
   RenderTemplateArgs,
   SendDeveloperFeedbackArgs,
+  MemoryArgs,
+  SessionSearchArgs,
+  SessionSearchHit,
+  SessionSearchResult,
+  ProposeSkillArgs,
+  CompressContextArgs,
 } from './handlers/index.ts';
 
 // Tool definitions — single source of truth

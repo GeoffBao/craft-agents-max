@@ -59,6 +59,16 @@ export function isEmbeddedServerEnabled(): boolean {
   return false;
 }
 
+/**
+ * Agent learning features (memory, session recall, skill drafts, prompt intelligence).
+ * Defaults to disabled. Override with CRAFT_FEATURE_AGENT_LEARNING=1|0.
+ */
+export function isAgentLearningEnabled(): boolean {
+  const override = parseBooleanEnv(getEnv('CRAFT_FEATURE_AGENT_LEARNING'));
+  if (override !== undefined) return override;
+  return false;
+}
+
 export const FEATURE_FLAGS = {
   /** Enable Opus 4.7 fast mode (speed:"fast" + beta header). 6x pricing. */
   fastMode: false,
@@ -86,5 +96,12 @@ export const FEATURE_FLAGS = {
    */
   get embeddedServer(): boolean {
     return isEmbeddedServerEnabled();
+  },
+  /**
+   * Enable Hermes/OpenClaw-style agent learning (memory, recall, skill drafts).
+   * Defaults to disabled. Override with CRAFT_FEATURE_AGENT_LEARNING=1|0.
+   */
+  get agentLearning(): boolean {
+    return isAgentLearningEnabled();
   },
 } as const;

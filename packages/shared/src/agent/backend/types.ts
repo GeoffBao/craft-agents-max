@@ -299,6 +299,8 @@ export interface ChatOptions {
   isRetry?: boolean;
   /** Override thinking level for this message only */
   thinkingOverride?: ThinkingLevel;
+  /** Internal: tool-continuation nudge depth after empty post-tool responses */
+  loopRecoveryDepth?: number;
 }
 
 /**

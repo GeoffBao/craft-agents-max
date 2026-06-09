@@ -79,6 +79,26 @@ export interface SessionScopedToolCallbacks {
   getMessagingBindingsFn?: (sessionId: string) => Array<{ platform: string; channelId: string; threadId?: number; channelName?: string; enabled: boolean }>;
   /** Unbind messaging channels from a session. Returns count of removed bindings. */
   unbindMessagingChannelFn?: (sessionId: string, platform?: string) => number;
+
+  /** FTS session search (agent learning). */
+  sessionSearchFn?: (options: {
+    query: string;
+    limit?: number;
+    sessionId?: string;
+    cursor?: string;
+    workspacePath: string;
+  }) => Promise<import('@craft-agent/session-tools-core').SessionSearchResult>;
+
+  /** Conversation messages for compress_context analysis. */
+  getConversationMessagesFn?: () => Promise<Array<{
+    role: 'user' | 'assistant' | 'tool';
+    content: string;
+    toolName?: string;
+    isIntermediate?: boolean;
+  }>>;
+
+  /** Observability hook when a skill draft is proposed. */
+  onSkillDraftProposedFn?: (draft: { slug: string; path: string; title: string }) => void;
 }
 
 // Registry of callbacks keyed by sessionId

@@ -72,6 +72,11 @@ export {
 // Local imports for use within this file's factory function
 import { getSessionScopedToolCallbacks } from './session-scoped-tool-callback-registry.ts';
 import { attachSessionSelfManagementBindings } from './session-self-management-bindings.ts';
+import { attachAgentLearningBindings } from './agent-learning-bindings.ts';
+import {
+  resolveAgentLearningConfig,
+  getEnabledAgentLearningTools,
+} from '../agent-learning/config.ts';
 
 /** Backend-executed session tools currently supported by the Claude adapter layer. */
 export const CLAUDE_BACKEND_SESSION_TOOL_NAMES = new Set<string>([
@@ -219,7 +224,9 @@ export function getSessionScopedTools(
   workspaceRootPath: string,
   workspaceId?: string
 ): ReturnType<typeof createSdkMcpServer> {
-  const cacheKey = `${sessionId}::${workspaceRootPath}`;
+  const learningConfig = resolveAgentLearningConfig(workspaceRootPath);
+  const enabledLearningTools = getEnabledAgentLearningTools(learningConfig);
+  const cacheKey = `${sessionId}::${workspaceRootPath}::al:${learningConfig.enabled}:${[...enabledLearningTools].sort().join(',')}`;
 
   // Return cached tools if available, but always create a fresh MCP server wrapper
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -243,6 +250,9 @@ export function getSessionScopedTools(
 
     // Attach session self-management bindings (lazy getters from callback registry)
     attachSessionSelfManagementBindings(ctx, sessionId);
+    if (learningConfig.enabled) {
+      attachAgentLearningBindings(ctx, sessionId, workspaceRootPath);
+    }
 
     // Helper to create a tool from the canonical registry.
     // The `as any` on schema bridges a Zod generic-variance issue when .shape
@@ -261,7 +271,11 @@ export function getSessionScopedTools(
 
     // Create tools from the canonical registry — all tools with handlers.
     // Tool visibility is centrally filtered in session-tools-core to avoid backend drift.
-    tools = getSessionToolDefs({ includeDeveloperFeedback: FEATURE_FLAGS.developerFeedback })
+    tools = getSessionToolDefs({
+      includeDeveloperFeedback: FEATURE_FLAGS.developerFeedback,
+      includeAgentLearning: learningConfig.enabled,
+      enabledAgentLearningTools: enabledLearningTools,
+    })
       .filter(def => def.handler !== null) // Skip backend-specific tools (call_llm)
       .map(def => registryTool(def.name, def.inputSchema.shape));
 

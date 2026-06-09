@@ -13,6 +13,7 @@
 
 import type { PermissionMode } from '../agent/mode-manager.ts';
 import type { ThinkingLevel } from '../agent/thinking-levels.ts';
+import type { AgentLearningWorkspaceConfig } from '../agent-learning/config.ts';
 
 /**
  * Local MCP server configuration
@@ -67,6 +68,12 @@ export interface WorkspaceConfig {
    * Resolution order: ENV (CRAFT_LOCAL_MCP_ENABLED) > workspace config > default (true)
    */
   localMcpServers?: LocalMcpConfig;
+
+  /**
+   * Agent learning features (memory, session recall, skill drafts, prompt intelligence).
+   * Master switch: agentLearning.enabled. Sub-features default on when enabled.
+   */
+  agentLearning?: AgentLearningWorkspaceConfig;
 
   createdAt: number;
   updatedAt: number;
