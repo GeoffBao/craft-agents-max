@@ -3,7 +3,7 @@ import type { ToolResult } from '../types.ts';
 import { successResponse, errorResponse } from '../response.ts';
 
 export type MemoryAction = 'add' | 'replace' | 'remove';
-export type MemoryTarget = 'user' | 'memory' | 'project';
+export type MemoryTarget = 'user' | 'soul' | 'memory' | 'project';
 
 export interface MemoryArgs {
   action: MemoryAction;

@@ -43,6 +43,7 @@ export interface AgentLearningConfig {
   learningNudge: boolean;
   backgroundReview: boolean;
   compactionMemoryFlush: boolean;
+  compactionMemoryAutoFlush: boolean;
   heartbeat: boolean;
   observability: boolean;
 }
@@ -69,6 +70,7 @@ const DEFAULT_CONFIG: AgentLearningConfig = {
   learningNudge: false,
   backgroundReview: false,
   compactionMemoryFlush: false,
+  compactionMemoryAutoFlush: false,
   heartbeat: false,
   observability: false,
 };
@@ -110,6 +112,7 @@ export function resolveAgentLearningConfig(workspaceRootPath?: string): AgentLea
     learningNudge: flag('learningNudge'),
     backgroundReview: flag('backgroundReview'),
     compactionMemoryFlush: flag('compactionMemoryFlush'),
+    compactionMemoryAutoFlush: flag('compactionMemoryAutoFlush'),
     heartbeat: flag('heartbeat'),
     observability: flag('observability'),
   };

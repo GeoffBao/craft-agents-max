@@ -33,7 +33,7 @@ export function attachAgentLearningBindings(
   Object.defineProperty(context, 'applyMemoryOperation', {
     value: async (args: {
       action: 'add' | 'replace' | 'remove';
-      target: 'user' | 'memory' | 'project';
+      target: 'user' | 'soul' | 'memory' | 'project';
       content: string;
       key?: string;
     }) => {

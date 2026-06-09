@@ -1064,6 +1064,8 @@
   "settings.workspace.agentLearningBackgroundReviewDesc": "After each turn, run a lightweight LLM review for memory/skill candidates (suggest only)",
   "settings.workspace.agentLearningCompactionFlush": "Compaction memory hints",
   "settings.workspace.agentLearningCompactionFlushDesc": "Detect durable facts before compaction and suggest memory writes (not auto-written)",
+  "settings.workspace.agentLearningCompactionAutoFlush": "Auto-flush on compaction",
+  "settings.workspace.agentLearningCompactionAutoFlushDesc": "When enabled, write top compaction fact candidates to MEMORY.md automatically (opt-in)",
   "settings.workspace.agentLearningObservability": "Learning observability log",
   "settings.workspace.agentLearningObservabilityDesc": "Append agent-learning events to ~/.craft-agent/logs/agent-learning.jsonl",
   "skillDrafts.pendingTitle": "Pending drafts",

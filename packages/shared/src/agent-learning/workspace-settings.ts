@@ -12,6 +12,7 @@ export interface AgentLearningWorkspaceConfig {
   learningNudge?: boolean;
   backgroundReview?: boolean;
   compactionMemoryFlush?: boolean;
+  compactionMemoryAutoFlush?: boolean;
   heartbeat?: boolean;
   observability?: boolean;
 }
@@ -28,6 +29,7 @@ export function defaultAgentLearningWorkspaceConfig(): AgentLearningWorkspaceCon
     learningNudge: true,
     backgroundReview: true,
     compactionMemoryFlush: true,
+    compactionMemoryAutoFlush: false,
     heartbeat: false,
     observability: true,
   };
@@ -47,6 +49,7 @@ export function normalizeAgentLearningWorkspaceConfig(
     learningNudge: block?.learningNudge ?? defaults.learningNudge,
     backgroundReview: block?.backgroundReview ?? defaults.backgroundReview,
     compactionMemoryFlush: block?.compactionMemoryFlush ?? defaults.compactionMemoryFlush,
+    compactionMemoryAutoFlush: block?.compactionMemoryAutoFlush ?? defaults.compactionMemoryAutoFlush,
     heartbeat: block?.heartbeat ?? defaults.heartbeat,
     observability: block?.observability ?? defaults.observability,
   };

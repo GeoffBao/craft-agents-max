@@ -2,7 +2,7 @@
  * Persistent memory types — Hermes-style USER.md / MEMORY.md / PROJECT.md.
  */
 
-export type MemoryTarget = 'user' | 'memory' | 'project';
+export type MemoryTarget = 'user' | 'soul' | 'memory' | 'project';
 
 export type MemoryAction = 'add' | 'replace' | 'remove';
 
@@ -24,6 +24,7 @@ export interface MemoryOperationResult {
 
 export interface MemorySnapshot {
   userMd: string;
+  soulMd: string;
   memoryMd: string;
   projectMd: string;
   capturedAt: number;

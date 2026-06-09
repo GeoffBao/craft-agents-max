@@ -589,6 +589,12 @@ export default function WorkspaceSettingsPage() {
                       onCheckedChange={(checked) => handleAgentLearningPatch({ compactionMemoryFlush: checked })}
                     />
                     <SettingsToggle
+                      label={t("settings.workspace.agentLearningCompactionAutoFlush")}
+                      description={t("settings.workspace.agentLearningCompactionAutoFlushDesc")}
+                      checked={agentLearning.compactionMemoryAutoFlush ?? false}
+                      onCheckedChange={(checked) => handleAgentLearningPatch({ compactionMemoryAutoFlush: checked })}
+                    />
+                    <SettingsToggle
                       label={t("settings.workspace.agentLearningObservability")}
                       description={t("settings.workspace.agentLearningObservabilityDesc")}
                       checked={agentLearning.observability ?? true}

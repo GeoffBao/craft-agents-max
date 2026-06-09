@@ -16,6 +16,8 @@ import { resolveAgentLearningConfig } from '../../agent-learning/config.ts';
 import {
   buildHeartbeatAutomationPrompt,
   ensureHeartbeatChecklist,
+  recordHeartbeatRun,
+  shouldRunHeartbeat,
 } from '../../agent-learning/heartbeat.ts';
 
 const log = createLogger('prompt-handler');
@@ -105,9 +107,12 @@ export class PromptHandler implements AutomationHandler {
       let heartbeatPrefix: string | null = null;
       if (event === 'SchedulerTick') {
         const cfg = resolveAgentLearningConfig(this.options.workspaceRootPath);
-        if (cfg.enabled && cfg.heartbeat) {
+        if (cfg.enabled && cfg.heartbeat && shouldRunHeartbeat(this.options.workspaceRootPath)) {
           ensureHeartbeatChecklist(this.options.workspaceRootPath);
           heartbeatPrefix = buildHeartbeatAutomationPrompt(this.options.workspaceRootPath);
+          if (heartbeatPrefix) {
+            recordHeartbeatRun(this.options.workspaceRootPath);
+          }
         }
       }
 

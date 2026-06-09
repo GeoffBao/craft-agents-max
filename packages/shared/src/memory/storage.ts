@@ -19,6 +19,7 @@ export function getWorkspaceMemoryDir(workspaceRootPath: string): string {
 
 function memoryFilePath(target: MemoryTarget, workspaceRootPath: string): string {
   if (target === 'user') return join(getGlobalMemoryDir(), 'USER.md');
+  if (target === 'soul') return join(getGlobalMemoryDir(), 'SOUL.md');
   if (target === 'memory') return join(getGlobalMemoryDir(), 'MEMORY.md');
   return join(getWorkspaceMemoryDir(workspaceRootPath), 'PROJECT.md');
 }
@@ -74,6 +75,7 @@ function escapeRegex(value: string): string {
 export function loadMemorySnapshot(workspaceRootPath: string): MemorySnapshot {
   return {
     userMd: readFileOrEmpty(memoryFilePath('user', workspaceRootPath)),
+    soulMd: readFileOrEmpty(memoryFilePath('soul', workspaceRootPath)),
     memoryMd: readFileOrEmpty(memoryFilePath('memory', workspaceRootPath)),
     projectMd: readFileOrEmpty(memoryFilePath('project', workspaceRootPath)),
     capturedAt: Date.now(),
@@ -85,6 +87,9 @@ export function formatMemorySnapshotForPrompt(snapshot: MemorySnapshot): string 
 
   if (snapshot.userMd.trim()) {
     parts.push(`<user_profile frozen="true">\n${snapshot.userMd.trim()}\n</user_profile>`);
+  }
+  if (snapshot.soulMd.trim()) {
+    parts.push(`<agent_persona frozen="true">\n${snapshot.soulMd.trim()}\n</agent_persona>`);
   }
   if (snapshot.memoryMd.trim()) {
     parts.push(`<long_term_memory frozen="true">\n${snapshot.memoryMd.trim()}\n</long_term_memory>`);

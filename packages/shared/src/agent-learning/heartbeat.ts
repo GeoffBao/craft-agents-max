@@ -8,6 +8,12 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 
 export const HEARTBEAT_FILENAME = 'HEARTBEAT.md';
+export const HEARTBEAT_STATE_FILENAME = 'heartbeat-state.json';
+export const DEFAULT_HEARTBEAT_MIN_INTERVAL_MS = 60 * 60 * 1000;
+
+interface HeartbeatState {
+  lastRunAt: number;
+}
 
 export function getHeartbeatPath(workspaceRootPath: string): string {
   return join(workspaceRootPath, '.craft', HEARTBEAT_FILENAME);
@@ -41,6 +47,41 @@ Run on SchedulerTick (read-only by default). Keep items short and actionable.
 
 Cost guard: respect workspace agentLearning.heartbeat budget; skip if last run < 1h ago.
 `;
+
+function getHeartbeatStatePath(workspaceRootPath: string): string {
+  return join(workspaceRootPath, '.craft', HEARTBEAT_STATE_FILENAME);
+}
+
+export function getHeartbeatLastRunAt(workspaceRootPath: string): number | null {
+  const path = getHeartbeatStatePath(workspaceRootPath);
+  if (!existsSync(path)) return null;
+  try {
+    const state = JSON.parse(readFileSync(path, 'utf-8')) as HeartbeatState;
+    return typeof state.lastRunAt === 'number' ? state.lastRunAt : null;
+  } catch {
+    return null;
+  }
+}
+
+export function recordHeartbeatRun(workspaceRootPath: string, at = Date.now()): void {
+  const path = getHeartbeatStatePath(workspaceRootPath);
+  const dir = dirname(path);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+  writeFileSync(path, JSON.stringify({ lastRunAt: at } satisfies HeartbeatState), 'utf-8');
+}
+
+/** Returns false when heartbeat ran within minIntervalMs (default 1h). */
+export function shouldRunHeartbeat(
+  workspaceRootPath: string,
+  minIntervalMs = DEFAULT_HEARTBEAT_MIN_INTERVAL_MS,
+  now = Date.now(),
+): boolean {
+  const last = getHeartbeatLastRunAt(workspaceRootPath);
+  if (last == null) return true;
+  return now - last >= minIntervalMs;
+}
 
 export function buildHeartbeatAutomationPrompt(workspaceRootPath: string): string | null {
   const checklist = loadHeartbeatChecklist(workspaceRootPath);

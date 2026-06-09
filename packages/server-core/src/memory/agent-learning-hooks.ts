@@ -10,6 +10,7 @@ import {
   extractCompactionFactCandidates,
   detectHadSuccessfulMultiStepFix,
 } from '@craft-agent/shared/agent-learning';
+import { applyMemoryOperation } from '@craft-agent/shared/memory';
 import { getSessionIndexManager } from './session-indexer.ts';
 import { searchSessions } from './session-search.ts';
 import { logAgentLearningEvent } from './observability.ts';
@@ -117,7 +118,30 @@ export function evaluatePreCompactLearningInfoMessage(
           payload: { source: 'pre_compact', candidates: facts },
         });
       }
-      if (!infoMessage) {
+      if (cfg.compactionMemoryAutoFlush) {
+        const written: string[] = [];
+        for (const fact of facts.slice(-2)) {
+          const result = applyMemoryOperation(
+            workspaceRootPath,
+            'add',
+            'memory',
+            fact.content,
+            fact.key,
+          );
+          if (result.ok) written.push(fact.key);
+        }
+        if (written.length > 0) {
+          infoMessage =
+            `Compaction soon — auto-wrote ${written.length} fact(s) to MEMORY.md (${written.join(', ')}).`;
+          if (cfg.observability) {
+            logAgentLearningEvent({
+              type: 'memory_write',
+              sessionId,
+              payload: { source: 'compaction_auto_flush', keys: written },
+            });
+          }
+        }
+      } else if (!infoMessage) {
         infoMessage =
           `Compaction soon — ${facts.length} durable fact candidate(s) detected. ` +
           'Use `memory` before context is summarized (not auto-written).';
