@@ -92,7 +92,15 @@ export async function runSilentCompactionFlushIfEnabled(params: {
     }
 
     return { result, appliedKeys };
-  } catch {
+  } catch (err) {
+    console.error('[agent-learning] silent compaction flush error:', err);
+    if (cfg.observability) {
+      logAgentLearningEvent({
+        type: 'compaction_flush',
+        sessionId: params.sessionId,
+        payload: { source: 'silent_flush', error: err instanceof Error ? err.message : String(err) },
+      });
+    }
     return { result: null, appliedKeys: [] };
   }
 }

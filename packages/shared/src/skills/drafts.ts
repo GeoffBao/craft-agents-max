@@ -81,7 +81,7 @@ export function promoteSkillDraft(
   try {
     mkdirSync(getWorkspaceSkillsPath(workspaceRoot), { recursive: true });
     renameSync(draftDir, destDir);
-    invalidateSkillsCache(workspaceRoot);
+    invalidateSkillsCache();
     return { ok: true, message: `Promoted draft "${slug}" to skills/${slug}/` };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

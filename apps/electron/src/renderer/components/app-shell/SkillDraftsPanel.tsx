@@ -7,7 +7,7 @@ import type { LoadedSkillDraft } from '@craft-agent/shared/skills'
 export interface SkillDraftsPanelProps {
   workspaceId: string
   drafts: LoadedSkillDraft[]
-  onDraftsChanged: () => void
+  onDraftsChanged: () => Promise<void> | void
 }
 
 export function SkillDraftsPanel({
@@ -25,7 +25,7 @@ export function SkillDraftsPanel({
     try {
       await window.electronAPI.promoteSkillDraft(workspaceId, slug)
       toast.success(t('skillDrafts.promoted', { name: slug }))
-      onDraftsChanged()
+      await onDraftsChanged()
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       toast.error(t('skillDrafts.promoteFailed'), { description: message })
@@ -39,7 +39,7 @@ export function SkillDraftsPanel({
     try {
       await window.electronAPI.rejectSkillDraft(workspaceId, slug)
       toast.success(t('skillDrafts.rejected', { name: slug }))
-      onDraftsChanged()
+      await onDraftsChanged()
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       toast.error(t('skillDrafts.rejectFailed'), { description: message })

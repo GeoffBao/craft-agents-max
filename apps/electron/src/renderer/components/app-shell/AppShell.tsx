@@ -924,16 +924,6 @@ function AppShellContent({
     return cleanup
   }, [activeWorkspaceId])
 
-  // Subscribe to live skill updates (when skills are added/removed dynamically)
-  React.useEffect(() => {
-    const cleanup = window.electronAPI.onSkillsChanged((workspaceId, updatedSkills) => {
-      if (workspaceId !== activeWorkspaceId) return
-      setSkills(updatedSkills || [])
-      void refreshSkillDrafts()
-    })
-    return cleanup
-  }, [activeWorkspaceId, refreshSkillDrafts])
-
   // Handle session source selection changes
   const handleSessionSourcesChange = React.useCallback(async (sessionId: string, sourceSlugs: string[]) => {
     try {
@@ -1318,6 +1308,16 @@ function AppShellContent({
     })
     void refreshSkillDrafts()
   }, [activeWorkspaceId, activeSessionWorkingDirectory, refreshSkillDrafts])
+
+  // Subscribe to live skill updates (when skills are added/removed dynamically)
+  React.useEffect(() => {
+    const cleanup = window.electronAPI.onSkillsChanged((workspaceId, updatedSkills) => {
+      if (workspaceId !== activeWorkspaceId) return
+      setSkills(updatedSkills || [])
+      void refreshSkillDrafts()
+    })
+    return cleanup
+  }, [activeWorkspaceId, refreshSkillDrafts])
 
   // Filter session metadata by active workspace
   // Also exclude hidden sessions (mini-agent sessions) from all counts and lists

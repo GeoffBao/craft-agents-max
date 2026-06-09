@@ -26,13 +26,13 @@ function wrapNodeDatabase(db: import('node:sqlite').DatabaseSync): IndexDatabase
       const stmt = db.prepare(sql);
       return {
         run(...params: unknown[]) {
-          stmt.run(...params);
+          stmt.run(...(params as import('node:sqlite').SQLInputValue[]));
         },
         get(...params: unknown[]) {
-          return stmt.get(...params);
+          return stmt.get(...(params as import('node:sqlite').SQLInputValue[]));
         },
         all(...params: unknown[]) {
-          return stmt.all(...params);
+          return stmt.all(...(params as import('node:sqlite').SQLInputValue[]));
         },
       };
     },

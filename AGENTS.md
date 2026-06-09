@@ -4,6 +4,9 @@
 - Do not reintroduce the previously added Knowledge top-level module unless explicitly requested; the user judged it unnecessary and incomplete.
 - Defer Messaging Gateway always-on UX enhancements unless explicitly requested.
 - When adding fork-specific features, keep changes upstream-merge-friendly so Craft Agents upstream can be merged without compounding divergence.
+- Skip OpenAI Agent API and Hermes-style MCP bridge migrations; session-scoped agent-learning tools plus existing MCP Sources cover external tool needs.
+- Prioritize agent-learning memory depth (daily journals, FTS recall, silent compaction flush) over OpenClaw/Hermes control-surface parity.
+- When implementing attached plans, do not edit the plan file; apply changes in code only.
 
 ## Learned Workspace Facts
 - Craft Agents Max is a Bun workspace monorepo with Electron desktop, CLI, WebUI, viewer apps, and shared packages under `packages/*`.
@@ -11,7 +14,9 @@
 - App config and workspace data default to `~/.craft-agent`, with per-workspace sessions, sources, skills, automations, and status config.
 - Workspace Skills load from global `~/.agents/skills`, workspace `skills/*/SKILL.md`, and project `.agents/skills`.
 - MCP support is modeled as workspace Sources and routed through the shared MCP pool for backend tool calls.
-- Sessions lock `llmConnection` after the first message; current model changes stay within the locked connection unless connection-switch logic is added.
+- Sessions lock `llmConnection` after the first message, but mid-session connection switches and quota-exhausted auto-fallback are supported via workspace `autoModelFallback` and `fallbackConnections`.
 - Automations already exist through `AutomationSystem`, scheduler ticks, webhooks, and runtime hooks; messaging gateway supports Telegram, WhatsApp, and Lark.
-- Agent learning (Hermes/OpenClaw-inspired) is feature-flagged off by default; enable via `CRAFT_FEATURE_AGENT_LEARNING=1` or workspace `config.json` `agentLearning` (Settings UI controls mirror this).
-- Persistent memory stores `USER.md` and `MEMORY.md` under `~/.craft-agent/memory/` and per-workspace `PROJECT.md` under `{workspace}/.craft/memory/`; session recall uses SQLite FTS5 in `{workspace}/.craft/memory-index/`.
+- Agent learning (Hermes/OpenClaw-inspired) is feature-flagged off by default; enable via `CRAFT_FEATURE_AGENT_LEARNING=1` or workspace `config.json` `agentLearning` (14 sub-toggles in Electron Settings).
+- Persistent memory stores global `USER.md`, `SOUL.md`, and `MEMORY.md` under `~/.craft-agent/memory/`; workspace `PROJECT.md` and daily `daily/YYYY-MM-DD.md` under `{workspace}/.craft/memory/`.
+- Session recall uses SQLite FTS5 at `{workspace}/.craft/memory-index/sessions-fts.sqlite`; memory recall uses FTS5 at `{workspace}/.craft/memory-index/memory-fts.sqlite`.
+- Agent-learning compaction options include hint-only flush, optional regex auto-flush to `MEMORY.md`, and opt-in silent mini-agent flush at ~85% context (linked to the compaction-hint toggle).
