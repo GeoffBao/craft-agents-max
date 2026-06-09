@@ -395,7 +395,7 @@ export interface SessionToolContext {
   /** Apply a memory file operation (injected by shared agent-learning bindings). */
   applyMemoryOperation?(args: {
     action: 'add' | 'replace' | 'remove';
-    target: 'user' | 'soul' | 'memory' | 'project';
+    target: 'user' | 'soul' | 'memory' | 'project' | 'daily';
     content: string;
     key?: string;
   }): Promise<{ ok: boolean; message: string }> | { ok: boolean; message: string };

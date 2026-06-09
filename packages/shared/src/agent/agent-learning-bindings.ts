@@ -33,7 +33,7 @@ export function attachAgentLearningBindings(
   Object.defineProperty(context, 'applyMemoryOperation', {
     value: async (args: {
       action: 'add' | 'replace' | 'remove';
-      target: 'user' | 'soul' | 'memory' | 'project';
+      target: 'user' | 'soul' | 'memory' | 'project' | 'daily';
       content: string;
       key?: string;
     }) => {
@@ -46,7 +46,7 @@ export function attachAgentLearningBindings(
       );
       if (result.ok) {
         emitLearningEvent(sessionId, {
-          type: 'memory_write',
+          type: args.target === 'daily' ? 'daily_memory_write' : 'memory_write',
           payload: { action: args.action, target: args.target, key: args.key },
         });
       }
@@ -57,8 +57,13 @@ export function attachAgentLearningBindings(
   });
 
   Object.defineProperty(context, 'searchMemoryMd', {
-    value: async (opts: { query: string; limit?: number }) =>
-      searchMemoryMd(opts.query, opts.limit),
+    value: async (opts: { query: string; limit?: number }) => {
+      const ftsFn = getSessionScopedToolCallbacks(sessionId)?.memorySearchFn;
+      if (ftsFn) {
+        return ftsFn(opts);
+      }
+      return searchMemoryMd(opts.query, opts.limit);
+    },
     configurable: true,
     enumerable: true,
   });

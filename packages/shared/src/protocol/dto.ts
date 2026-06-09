@@ -509,6 +509,8 @@ export interface AgentLearningWorkspaceSettings {
   backgroundReview?: boolean
   compactionMemoryFlush?: boolean
   compactionMemoryAutoFlush?: boolean
+  compactionSilentFlush?: boolean
+  dailyMemory?: boolean
   heartbeat?: boolean
   observability?: boolean
 }

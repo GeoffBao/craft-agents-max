@@ -229,7 +229,7 @@ export const UnbindMessagingChannelSchema = z.object({
 
 export const MemorySchema = z.object({
   action: z.enum(['add', 'replace', 'remove']).describe('Memory operation'),
-  target: z.enum(['user', 'soul', 'memory', 'project']).describe('Which memory file to update'),
+  target: z.enum(['user', 'soul', 'memory', 'project', 'daily']).describe('Which memory file to update (daily = today\'s journal)'),
   content: z.string().describe('Content to add or replace. For remove, may be empty.'),
   key: z.string().optional().describe('Section heading for replace/remove, or subsection for add'),
 });

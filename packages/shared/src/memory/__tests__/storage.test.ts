@@ -2,7 +2,13 @@ import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
 import { mkdtempSync, rmSync, existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { applyMemoryOperation, getGlobalMemoryDir } from '../storage.ts';
+import {
+  applyMemoryOperation,
+  getGlobalMemoryDir,
+  loadMemorySnapshot,
+  formatMemorySnapshotForPrompt,
+} from '../storage.ts';
+import { getDailyMemoryPath, getTodayDateKey } from '../daily.ts';
 import { scanMemoryContent } from '../scan.ts';
 
 describe('memory storage', () => {
@@ -31,5 +37,22 @@ describe('memory storage', () => {
   test('scanMemoryContent rejects api keys', () => {
     const scan = scanMemoryContent('api_key=sk-abcdefghijklmnopqrstuvwxyz123456');
     expect(scan.safe).toBe(false);
+  });
+
+  test('applyMemoryOperation add writes daily journal for today', () => {
+    const result = applyMemoryOperation(workspaceRoot, 'add', 'daily', 'Shipped memory indexer', 'work');
+    expect(result.ok).toBe(true);
+    const dailyPath = getDailyMemoryPath(workspaceRoot, getTodayDateKey());
+    expect(existsSync(dailyPath)).toBe(true);
+    expect(readFileSync(dailyPath, 'utf-8')).toContain('Shipped memory indexer');
+  });
+
+  test('loadMemorySnapshot includes daily blocks when enabled', () => {
+    applyMemoryOperation(workspaceRoot, 'add', 'daily', 'Today note');
+    const snapshot = loadMemorySnapshot(workspaceRoot, { dailyMemory: true });
+    expect(snapshot.dailyTodayMd).toContain('Today note');
+    const formatted = formatMemorySnapshotForPrompt(snapshot);
+    expect(formatted).toContain('<daily_journal');
+    expect(formatted).toContain(snapshot.dailyTodayDate ?? '');
   });
 });

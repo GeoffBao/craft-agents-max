@@ -57,4 +57,30 @@ describe('agent-learning config', () => {
     expect(cfg.sessionRecall).toBe(false);
     expect(cfg.persistentMemory).toBe(true);
   });
+
+  test('dailyMemory and compactionSilentFlush default off', () => {
+    process.env.CRAFT_FEATURE_AGENT_LEARNING = '1';
+    const cfg = resolveAgentLearningConfig(workspaceRoot);
+    expect(cfg.dailyMemory).toBe(false);
+    expect(cfg.compactionSilentFlush).toBe(false);
+  });
+
+  test('workspace overrides dailyMemory and compactionSilentFlush', () => {
+    delete process.env.CRAFT_FEATURE_AGENT_LEARNING;
+    writeFileSync(join(workspaceRoot, 'config.json'), JSON.stringify({
+      id: 'ws1',
+      name: 'Test',
+      slug: 'test',
+      createdAt: 1,
+      updatedAt: 1,
+      agentLearning: {
+        enabled: true,
+        dailyMemory: true,
+        compactionSilentFlush: true,
+      },
+    }));
+    const cfg = resolveAgentLearningConfig(workspaceRoot);
+    expect(cfg.dailyMemory).toBe(true);
+    expect(cfg.compactionSilentFlush).toBe(true);
+  });
 });

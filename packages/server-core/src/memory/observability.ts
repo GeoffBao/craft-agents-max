@@ -8,6 +8,8 @@ import { CONFIG_DIR } from '@craft-agent/shared/config';
 
 export type ObservabilityEventType =
   | 'memory_write'
+  | 'daily_memory_write'
+  | 'memory_index_search'
   | 'session_search'
   | 'skill_draft'
   | 'compression_analysis'

@@ -87,6 +87,7 @@ import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlA
 import { loadAllSkills, loadSkillBySlug, invalidateSkillsCache, type LoadedSkill } from '@craft-agent/shared/skills'
 import { resolveAgentLearningConfig } from '@craft-agent/shared/agent-learning'
 import {
+  createMemorySearchFn,
   createSessionSearchFn,
   emitSessionEndLearningSignals,
   evaluatePreCompactLearningInfoMessage,
@@ -95,6 +96,7 @@ import {
 } from '../memory/agent-learning-hooks.ts'
 import { logAgentLearningEvent } from '../memory/observability.ts'
 import { runBackgroundReviewInWorker } from '../memory/background-review-worker.ts'
+import { runSilentCompactionFlushInWorker } from '../memory/silent-compaction-flush-worker.ts'
 import { formatLearningNudgeInfoMessage } from '@craft-agent/shared/agent-learning'
 import { invalidateContextFileCache } from '@craft-agent/shared/prompts/system'
 import { getToolIconsDir, getMiniModel } from '@craft-agent/shared/config'
@@ -858,6 +860,7 @@ interface ManagedSession {
   turnStartFinalMessageId?: string
   /** Runtime-only: suppress duplicate PreCompact learning info per compaction cycle */
   preCompactLearningNudgeEmitted?: boolean
+  preCompactSilentFlushEmitted?: boolean
   // External session metadata updates seen while processing (applied after turn stop)
   pendingExternalMetadata?: SessionHeader
   // Guard: suppress external metadata revert after programmatic writes (setSessionStatus/setSessionLabels).
@@ -4210,6 +4213,7 @@ export class SessionManager implements ISessionManager {
 
           await this.sendMessage(sessionId, message, fileAttachments)
         },
+        memorySearchFn: createMemorySearchFn(managed.workspace.rootPath),
         sessionSearchFn: createSessionSearchFn(managed.workspace.rootPath),
         getConversationMessagesFn: async () => {
           return managed.messages
@@ -7516,19 +7520,42 @@ export class SessionManager implements ISessionManager {
 
       case 'status': {
         const isCompacting = event.message.includes('Compacting')
-        if (isCompacting && !managed.preCompactLearningNudgeEmitted) {
-          const preCompactText = evaluatePreCompactLearningInfoMessage(
-            managed.workspace.rootPath,
-            sessionId,
-            managed.messages.map(m => ({
-              role: m.role,
-              content: m.content,
-              isIntermediate: m.isIntermediate,
-            })),
-          )
-          if (preCompactText) {
-            managed.preCompactLearningNudgeEmitted = true
-            this.appendLearningInfoMessage(managed, preCompactText)
+        if (isCompacting) {
+          const compactMessages = managed.messages.map(m => ({
+            role: m.role,
+            content: m.content,
+            isIntermediate: m.isIntermediate,
+          }))
+
+          const alCfg = resolveAgentLearningConfig(managed.workspace.rootPath)
+          if (
+            alCfg.compactionSilentFlush &&
+            alCfg.compactionMemoryFlush &&
+            !managed.preCompactSilentFlushEmitted
+          ) {
+            managed.preCompactSilentFlushEmitted = true
+            void runSilentCompactionFlushInWorker({
+              workspace: managed.workspace,
+              sessionId,
+              messages: managed.messages.map(m => ({ role: m.role, content: m.content })),
+              llmConnection: managed.llmConnection,
+              model: managed.model,
+              workingDirectory: managed.workingDirectory,
+              sdkCwd: managed.sdkCwd,
+              buildHostRuntime: buildBackendHostRuntimeContext,
+            })
+          }
+
+          if (!managed.preCompactLearningNudgeEmitted) {
+            const preCompactText = evaluatePreCompactLearningInfoMessage(
+              managed.workspace.rootPath,
+              sessionId,
+              compactMessages,
+            )
+            if (preCompactText) {
+              managed.preCompactLearningNudgeEmitted = true
+              this.appendLearningInfoMessage(managed, preCompactText)
+            }
           }
         }
         this.sendEvent({
@@ -7548,6 +7575,7 @@ export class SessionManager implements ISessionManager {
         // Other info messages are transient (just sent to renderer)
         if (isCompactionComplete) {
           managed.preCompactLearningNudgeEmitted = false
+          managed.preCompactSilentFlushEmitted = false
           const compactionMessage: Message = {
             id: generateMessageId(),
             role: 'info',

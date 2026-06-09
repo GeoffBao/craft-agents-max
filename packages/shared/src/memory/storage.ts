@@ -3,14 +3,26 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { homedir } from 'os';
 import { join } from 'path';
-import { CONFIG_DIR } from '../config/paths.ts';
 import { scanMemoryContent } from './scan.ts';
-import type { MemoryAction, MemoryOperationResult, MemorySnapshot, MemoryTarget } from './types.ts';
+import {
+  getDailyMemoryPath,
+  getTodayDateKey,
+  getYesterdayDateKey,
+} from './daily.ts';
+import type {
+  LoadMemorySnapshotOptions,
+  MemoryAction,
+  MemoryOperationResult,
+  MemorySnapshot,
+  MemoryTarget,
+} from './types.ts';
 import { MEMORY_FILE_MAX_BYTES, MEMORY_OPERATION_MAX_CHARS } from './types.ts';
 
 export function getGlobalMemoryDir(): string {
-  return join(CONFIG_DIR, 'memory');
+  const configDir = process.env.CRAFT_CONFIG_DIR ?? join(homedir(), '.craft-agent');
+  return join(configDir, 'memory');
 }
 
 export function getWorkspaceMemoryDir(workspaceRootPath: string): string {
@@ -21,6 +33,7 @@ function memoryFilePath(target: MemoryTarget, workspaceRootPath: string): string
   if (target === 'user') return join(getGlobalMemoryDir(), 'USER.md');
   if (target === 'soul') return join(getGlobalMemoryDir(), 'SOUL.md');
   if (target === 'memory') return join(getGlobalMemoryDir(), 'MEMORY.md');
+  if (target === 'daily') return getDailyMemoryPath(workspaceRootPath, getTodayDateKey());
   return join(getWorkspaceMemoryDir(workspaceRootPath), 'PROJECT.md');
 }
 
@@ -72,14 +85,28 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-export function loadMemorySnapshot(workspaceRootPath: string): MemorySnapshot {
-  return {
+export function loadMemorySnapshot(
+  workspaceRootPath: string,
+  options?: LoadMemorySnapshotOptions,
+): MemorySnapshot {
+  const snapshot: MemorySnapshot = {
     userMd: readFileOrEmpty(memoryFilePath('user', workspaceRootPath)),
     soulMd: readFileOrEmpty(memoryFilePath('soul', workspaceRootPath)),
     memoryMd: readFileOrEmpty(memoryFilePath('memory', workspaceRootPath)),
     projectMd: readFileOrEmpty(memoryFilePath('project', workspaceRootPath)),
     capturedAt: Date.now(),
   };
+
+  if (options?.dailyMemory) {
+    const today = getTodayDateKey();
+    const yesterday = getYesterdayDateKey();
+    snapshot.dailyTodayDate = today;
+    snapshot.dailyYesterdayDate = yesterday;
+    snapshot.dailyTodayMd = readFileOrEmpty(getDailyMemoryPath(workspaceRootPath, today));
+    snapshot.dailyYesterdayMd = readFileOrEmpty(getDailyMemoryPath(workspaceRootPath, yesterday));
+  }
+
+  return snapshot;
 }
 
 export function formatMemorySnapshotForPrompt(snapshot: MemorySnapshot): string {
@@ -96,6 +123,16 @@ export function formatMemorySnapshotForPrompt(snapshot: MemorySnapshot): string 
   }
   if (snapshot.projectMd.trim()) {
     parts.push(`<project_memory frozen="true">\n${snapshot.projectMd.trim()}\n</project_memory>`);
+  }
+  if (snapshot.dailyTodayMd?.trim() && snapshot.dailyTodayDate) {
+    parts.push(
+      `<daily_journal date="${snapshot.dailyTodayDate}" frozen="true">\n${snapshot.dailyTodayMd.trim()}\n</daily_journal>`,
+    );
+  }
+  if (snapshot.dailyYesterdayMd?.trim() && snapshot.dailyYesterdayDate) {
+    parts.push(
+      `<daily_journal date="${snapshot.dailyYesterdayDate}" frozen="true">\n${snapshot.dailyYesterdayMd.trim()}\n</daily_journal>`,
+    );
   }
 
   if (parts.length === 0) return '';

@@ -13,6 +13,7 @@ import {
 import { applyMemoryOperation } from '@craft-agent/shared/memory';
 import { getSessionIndexManager } from './session-indexer.ts';
 import { searchSessions } from './session-search.ts';
+import { searchMemoryFiles } from './memory-search.ts';
 import { logAgentLearningEvent } from './observability.ts';
 
 export function indexSessionForRecall(workspaceRootPath: string, sessionId: string): void {
@@ -183,6 +184,23 @@ export function evaluateSessionEndLearningInfoMessage(
   }
 
   return formatLearningNudgeCandidateInfoMessage(nudge);
+}
+
+export function createMemorySearchFn(workspaceRootPath: string) {
+  return async (options: { query: string; limit?: number }) => {
+    const cfg = resolveAgentLearningConfig(workspaceRootPath);
+    if (!cfg.enabled || !cfg.persistentMemory) {
+      throw new Error('memory_search is disabled for this workspace.');
+    }
+    const result = searchMemoryFiles(workspaceRootPath, options.query, options.limit);
+    if (cfg.observability) {
+      logAgentLearningEvent({
+        type: 'memory_index_search',
+        payload: { query: options.query, hitCount: result.hits.length },
+      });
+    }
+    return result;
+  };
 }
 
 export function createSessionSearchFn(workspaceRootPath: string) {

@@ -6,10 +6,18 @@ import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { getGlobalMemoryDir } from './storage.ts';
 
+export type MemorySearchTarget = 'memory' | 'project' | 'daily';
+
 export interface MemorySearchHit {
   line: number;
   snippet: string;
   section?: string;
+  /** Indexed memory file target (FTS-backed search). */
+  target?: MemorySearchTarget;
+  /** Relative path or label for the source file. */
+  file?: string;
+  /** YYYY-MM-DD for daily journal hits. */
+  date?: string;
 }
 
 export interface MemorySearchResult {

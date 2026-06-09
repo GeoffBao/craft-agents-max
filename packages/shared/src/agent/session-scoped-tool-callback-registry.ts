@@ -80,6 +80,12 @@ export interface SessionScopedToolCallbacks {
   /** Unbind messaging channels from a session. Returns count of removed bindings. */
   unbindMessagingChannelFn?: (sessionId: string, platform?: string) => number;
 
+  /** FTS memory search (agent learning). */
+  memorySearchFn?: (options: {
+    query: string;
+    limit?: number;
+  }) => Promise<import('@craft-agent/shared/memory').MemorySearchResult>;
+
   /** FTS session search (agent learning). */
   sessionSearchFn?: (options: {
     query: string;

@@ -547,6 +547,12 @@ export default function WorkspaceSettingsPage() {
                       onCheckedChange={(checked) => handleAgentLearningPatch({ persistentMemory: checked })}
                     />
                     <SettingsToggle
+                      label={t("settings.workspace.agentLearningDailyMemory")}
+                      description={t("settings.workspace.agentLearningDailyMemoryDesc")}
+                      checked={agentLearning.dailyMemory ?? false}
+                      onCheckedChange={(checked) => handleAgentLearningPatch({ dailyMemory: checked })}
+                    />
+                    <SettingsToggle
                       label={t("settings.workspace.agentLearningRecall")}
                       description={t("settings.workspace.agentLearningRecallDesc")}
                       checked={agentLearning.sessionRecall ?? true}
@@ -593,6 +599,12 @@ export default function WorkspaceSettingsPage() {
                       description={t("settings.workspace.agentLearningCompactionAutoFlushDesc")}
                       checked={agentLearning.compactionMemoryAutoFlush ?? false}
                       onCheckedChange={(checked) => handleAgentLearningPatch({ compactionMemoryAutoFlush: checked })}
+                    />
+                    <SettingsToggle
+                      label={t("settings.workspace.agentLearningCompactionSilentFlush")}
+                      description={t("settings.workspace.agentLearningCompactionSilentFlushDesc")}
+                      checked={agentLearning.compactionSilentFlush ?? false}
+                      onCheckedChange={(checked) => handleAgentLearningPatch({ compactionSilentFlush: checked })}
                     />
                     <SettingsToggle
                       label={t("settings.workspace.agentLearningObservability")}

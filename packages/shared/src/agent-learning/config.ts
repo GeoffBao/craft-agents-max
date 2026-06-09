@@ -44,6 +44,8 @@ export interface AgentLearningConfig {
   backgroundReview: boolean;
   compactionMemoryFlush: boolean;
   compactionMemoryAutoFlush: boolean;
+  compactionSilentFlush: boolean;
+  dailyMemory: boolean;
   heartbeat: boolean;
   observability: boolean;
 }
@@ -71,6 +73,8 @@ const DEFAULT_CONFIG: AgentLearningConfig = {
   backgroundReview: false,
   compactionMemoryFlush: false,
   compactionMemoryAutoFlush: false,
+  compactionSilentFlush: false,
+  dailyMemory: false,
   heartbeat: false,
   observability: false,
 };
@@ -99,8 +103,21 @@ export function resolveAgentLearningConfig(workspaceRootPath?: string): AgentLea
     return { ...DEFAULT_CONFIG };
   }
 
-  const flag = (key: keyof Omit<AgentLearningConfig, 'enabled'>): boolean =>
-    workspaceBlock?.[key] ?? true;
+  const defaults = defaultAgentLearningWorkspaceConfig();
+  const optInFlags = new Set<keyof AgentLearningWorkspaceConfig>([
+    'compactionMemoryAutoFlush',
+    'compactionSilentFlush',
+    'dailyMemory',
+    'heartbeat',
+  ]);
+
+  const flag = (key: keyof Omit<AgentLearningConfig, 'enabled'>): boolean => {
+    if (workspaceBlock?.[key] !== undefined) return Boolean(workspaceBlock[key]);
+    if (optInFlags.has(key as keyof AgentLearningWorkspaceConfig)) {
+      return Boolean(defaults[key as keyof AgentLearningWorkspaceConfig]);
+    }
+    return true;
+  };
 
   return {
     enabled: true,
@@ -113,6 +130,8 @@ export function resolveAgentLearningConfig(workspaceRootPath?: string): AgentLea
     backgroundReview: flag('backgroundReview'),
     compactionMemoryFlush: flag('compactionMemoryFlush'),
     compactionMemoryAutoFlush: flag('compactionMemoryAutoFlush'),
+    compactionSilentFlush: flag('compactionSilentFlush'),
+    dailyMemory: flag('dailyMemory'),
     heartbeat: flag('heartbeat'),
     observability: flag('observability'),
   };

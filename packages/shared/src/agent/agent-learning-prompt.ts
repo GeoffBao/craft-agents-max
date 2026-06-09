@@ -44,7 +44,9 @@ export function buildAgentLearningPromptBundle(
 
   let memoryBlock = '';
   if (config.persistentMemory) {
-    const snapshot = loadMemorySnapshot(params.workspaceRootPath);
+    const snapshot = loadMemorySnapshot(params.workspaceRootPath, {
+      dailyMemory: config.dailyMemory,
+    });
     memoryBlock = formatMemorySnapshotForPrompt(snapshot);
   }
 
