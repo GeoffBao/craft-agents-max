@@ -238,3 +238,16 @@ export function getSessionIndexManager(workspaceRootPath: string): SessionIndexM
   }
   return mgr;
 }
+
+export function closeSessionIndexManager(workspaceRootPath: string): void {
+  const mgr = indexManagers.get(workspaceRootPath);
+  if (mgr) {
+    mgr.close();
+    indexManagers.delete(workspaceRootPath);
+  }
+}
+
+process.on('exit', () => {
+  for (const mgr of indexManagers.values()) mgr.close();
+  indexManagers.clear();
+});

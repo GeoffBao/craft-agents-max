@@ -214,3 +214,16 @@ export function getMemoryIndexManager(workspaceRootPath: string): MemoryIndexMan
   }
   return mgr;
 }
+
+export function closeMemoryIndexManager(workspaceRootPath: string): void {
+  const mgr = indexManagers.get(workspaceRootPath);
+  if (mgr) {
+    mgr.close();
+    indexManagers.delete(workspaceRootPath);
+  }
+}
+
+process.on('exit', () => {
+  for (const mgr of indexManagers.values()) mgr.close();
+  indexManagers.clear();
+});

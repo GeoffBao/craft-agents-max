@@ -47,6 +47,17 @@ describe('memory storage', () => {
     expect(readFileSync(dailyPath, 'utf-8')).toContain('Shipped memory indexer');
   });
 
+  test('applyMemoryOperation add same key twice appends within section, no duplicate header', () => {
+    applyMemoryOperation(workspaceRoot, 'add', 'user', 'First entry', 'Preferences');
+    applyMemoryOperation(workspaceRoot, 'add', 'user', 'Second entry', 'Preferences');
+    const userPath = join(getGlobalMemoryDir(), 'USER.md');
+    const content = readFileSync(userPath, 'utf-8');
+    const headerCount = (content.match(/^## Preferences/gm) ?? []).length;
+    expect(headerCount).toBe(1);
+    expect(content).toContain('First entry');
+    expect(content).toContain('Second entry');
+  });
+
   test('loadMemorySnapshot includes daily blocks when enabled', () => {
     applyMemoryOperation(workspaceRoot, 'add', 'daily', 'Today note');
     const snapshot = loadMemorySnapshot(workspaceRoot, { dailyMemory: true });

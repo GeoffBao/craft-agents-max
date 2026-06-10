@@ -46,6 +46,13 @@ export async function runSilentCompactionFlushIfEnabled(params: {
 
   try {
     const raw = await params.agent.runMiniCompletion(prompt);
+
+    // Re-check after async gap — config may have been toggled while completion was in flight.
+    const cfgNow = resolveAgentLearningConfig(params.workspaceRootPath);
+    if (!cfgNow.enabled || !cfgNow.compactionMemoryFlush) {
+      return { result: null, appliedKeys: [] };
+    }
+
     const result = parseSilentCompactionFlushResponse(raw);
     if (!result || result.noReply || result.writes.length === 0) {
       if (cfg.observability) {

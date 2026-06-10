@@ -1299,6 +1299,13 @@ function AppShellContent({
     }
   }, [activeWorkspaceId])
 
+  const handleDraftsChanged = React.useCallback(async () => {
+    await refreshSkillDrafts()
+    if (!activeWorkspaceId) return
+    const loaded = await window.electronAPI.getSkills(activeWorkspaceId, activeSessionWorkingDirectory)
+    setSkills(loaded || [])
+  }, [activeWorkspaceId, activeSessionWorkingDirectory, refreshSkillDrafts])
+
   React.useEffect(() => {
     if (!activeWorkspaceId) return
     window.electronAPI.getSkills(activeWorkspaceId, activeSessionWorkingDirectory).then((loaded) => {
@@ -3184,11 +3191,7 @@ function AppShellContent({
                 <SkillDraftsPanel
                   workspaceId={activeWorkspaceId}
                   drafts={skillDrafts}
-                  onDraftsChanged={async () => {
-                    await refreshSkillDrafts()
-                    const loaded = await window.electronAPI.getSkills(activeWorkspaceId, activeSessionWorkingDirectory)
-                    setSkills(loaded || [])
-                  }}
+                  onDraftsChanged={handleDraftsChanged}
                 />
                 <SkillsListPanel
                   skills={skills}
