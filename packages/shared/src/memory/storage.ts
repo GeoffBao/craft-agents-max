@@ -59,10 +59,18 @@ function writeBounded(path: string, content: string): void {
 }
 
 function appendSection(existing: string, key: string | undefined, content: string): string {
-  const block = key
-    ? `\n\n## ${key}\n${content.trim()}\n`
-    : `\n\n- ${content.trim()}\n`;
-  return (existing.trim() + block).trim() + '\n';
+  const trimmedContent = content.trim();
+  if (key) {
+    // If this key already exists with identical content, skip to avoid duplicates.
+    const regex = new RegExp(`## ${escapeRegex(key)}\\s*\\n([\\s\\S]*?)(?=\\n## |$)`, 'i');
+    const m = regex.exec(existing);
+    if (m && m[1]!.trim() === trimmedContent) return existing;
+    const block = `\n\n## ${key}\n${trimmedContent}\n`;
+    return (existing.trim() + block).trim() + '\n';
+  }
+  const bulletLine = `- ${trimmedContent}`;
+  if (existing.includes(bulletLine)) return existing;
+  return (existing.trim() + `\n\n${bulletLine}\n`).trim() + '\n';
 }
 
 function replaceSection(existing: string, key: string, content: string): string {
