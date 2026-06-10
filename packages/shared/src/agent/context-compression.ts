@@ -50,7 +50,7 @@ export function analyzeConversation(messages: CompressionMessage[]): Compression
 
   return {
     messageCount: messages.length,
-    estimatedTokens: estimateTokens(String(chars)),
+    estimatedTokens: Math.ceil(chars / CHARS_PER_TOKEN),
     toolResultCount,
     oldestUserIndex,
   };

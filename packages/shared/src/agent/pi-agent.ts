@@ -2148,6 +2148,7 @@ export class PiAgent extends BaseAgent {
         loopRecoveryKind
         && !this.abortReason
         && loopRecoveryDepth < MAX_LOOP_RECOVERY_DEPTH
+        && resolveAgentLearningConfig(this.config.workspace.rootPath).enabled
       ) {
         this.debug(`Loop recovery (${loopRecoveryKind}) — sending continuation nudge`);
         yield {

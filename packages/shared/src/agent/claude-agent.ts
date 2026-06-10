@@ -37,6 +37,7 @@ import {
   buildLoopRecoveryUserMessage,
   MAX_LOOP_RECOVERY_DEPTH,
 } from './loop-recovery.ts';
+import { resolveAgentLearningConfig } from '../agent-learning/config.ts';
 import {
   getSessionPlansDir,
   getLastPlanFilePath,
@@ -1664,7 +1665,11 @@ This is a branched conversation. All prior messages in this conversation are par
         }
 
         const loopRecoveryKind = loopTracker.resolveLoopRecoveryKind();
-        if (loopRecoveryKind && loopRecoveryDepth < MAX_LOOP_RECOVERY_DEPTH) {
+        if (
+          loopRecoveryKind
+          && loopRecoveryDepth < MAX_LOOP_RECOVERY_DEPTH
+          && resolveAgentLearningConfig(this.workspaceRootPath).enabled
+        ) {
           debug(`[chat] Loop recovery (${loopRecoveryKind}) — sending continuation nudge`);
           yield {
             type: 'info',

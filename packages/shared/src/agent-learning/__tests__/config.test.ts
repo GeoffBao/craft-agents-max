@@ -65,6 +65,35 @@ describe('agent-learning config', () => {
     expect(cfg.compactionSilentFlush).toBe(false);
   });
 
+  test('backgroundReview and contextCompression are opt-in (default off when master on)', () => {
+    process.env.CRAFT_FEATURE_AGENT_LEARNING = '1';
+    const cfg = resolveAgentLearningConfig(workspaceRoot);
+    expect(cfg.backgroundReview).toBe(false);
+    expect(cfg.contextCompression).toBe(false);
+    // contextCompression off → compress_context tool not exposed
+    expect(getEnabledAgentLearningTools(cfg).has('compress_context')).toBe(false);
+  });
+
+  test('backgroundReview and contextCompression respect explicit opt-in', () => {
+    delete process.env.CRAFT_FEATURE_AGENT_LEARNING;
+    writeFileSync(join(workspaceRoot, 'config.json'), JSON.stringify({
+      id: 'ws1',
+      name: 'Test',
+      slug: 'test',
+      createdAt: 1,
+      updatedAt: 1,
+      agentLearning: {
+        enabled: true,
+        backgroundReview: true,
+        contextCompression: true,
+      },
+    }));
+    const cfg = resolveAgentLearningConfig(workspaceRoot);
+    expect(cfg.backgroundReview).toBe(true);
+    expect(cfg.contextCompression).toBe(true);
+    expect(getEnabledAgentLearningTools(cfg).has('compress_context')).toBe(true);
+  });
+
   test('compactionSilentFlush implies compactionMemoryFlush at resolve time', () => {
     delete process.env.CRAFT_FEATURE_AGENT_LEARNING;
     writeFileSync(join(workspaceRoot, 'config.json'), JSON.stringify({

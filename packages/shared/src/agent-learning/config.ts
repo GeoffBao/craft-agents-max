@@ -105,6 +105,8 @@ export function resolveAgentLearningConfig(workspaceRootPath?: string): AgentLea
 
   const defaults = defaultAgentLearningWorkspaceConfig();
   const optInFlags = new Set<keyof AgentLearningWorkspaceConfig>([
+    'backgroundReview',
+    'contextCompression',
     'compactionMemoryAutoFlush',
     'compactionSilentFlush',
     'dailyMemory',
