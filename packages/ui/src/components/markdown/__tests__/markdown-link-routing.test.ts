@@ -48,6 +48,41 @@ describe('resolveMarkdownLinkTarget', () => {
     })
   })
 
+  it('resolves obsidian URIs with absolute path params as file targets', () => {
+    expect(resolveMarkdownLinkTarget('obsidian://open?path=/Users/tester/vault/Wiki/note.md')).toEqual({
+      kind: 'file',
+      path: '/Users/tester/vault/Wiki/note.md',
+    })
+  })
+
+  it('decodes percent-encoded obsidian path params', () => {
+    expect(resolveMarkdownLinkTarget('obsidian://open?path=%2FUsers%2Ftester%2Fvault%2Fmy%20note.md')).toEqual({
+      kind: 'file',
+      path: '/Users/tester/vault/my note.md',
+    })
+  })
+
+  it('resolves obsidian URIs with home-relative path params as file targets', () => {
+    expect(resolveMarkdownLinkTarget('obsidian://open?path=~/vault/Wiki/note.md')).toEqual({
+      kind: 'file',
+      path: '~/vault/Wiki/note.md',
+    })
+  })
+
+  it('keeps vault-relative obsidian URIs as url targets (external open)', () => {
+    expect(resolveMarkdownLinkTarget('obsidian://open?path=Wiki/Synthesis/digest.md')).toEqual({
+      kind: 'url',
+      url: 'obsidian://open?path=Wiki/Synthesis/digest.md',
+    })
+  })
+
+  it('keeps vault+file obsidian URIs as url targets (external open)', () => {
+    expect(resolveMarkdownLinkTarget('obsidian://open?vault=KB&file=Wiki%2Fnote')).toEqual({
+      kind: 'url',
+      url: 'obsidian://open?vault=KB&file=Wiki%2Fnote',
+    })
+  })
+
   it('resolves https links as url targets', () => {
     expect(resolveMarkdownLinkTarget('https://example.com/image.jpg')).toEqual({
       kind: 'url',
