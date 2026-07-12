@@ -873,6 +873,13 @@ export type TeambitionCapabilityDto =
 export interface ListTeambitionTasksResponse {
   tasks: RendererTaskSummary[]
   capabilities: TeambitionCapabilityDto[]
+  /**
+   * Set when the gateway could not be built because Teambition credentials are
+   * missing or expired. `tasks`/`capabilities` are empty in this case; the UI
+   * should prompt the user to re-authenticate the Teambition source instead of
+   * treating this as a generic fetch failure.
+   */
+  needsReauth?: boolean
 }
 
 export interface ClaimTeambitionTaskRequest {
@@ -881,13 +888,29 @@ export interface ClaimTeambitionTaskRequest {
   kind: TeambitionTaskKind
   title: string
   scope: ExecutionScope
+  /**
+   * When retrying after a `binding_persist_failed` response, pass back the
+   * `sessionId` from that response so the retry reuses the existing session
+   * (snapshot + binding write) instead of calling `createSession()` again.
+   */
+  resumeSessionId?: string
 }
+
+export type ClaimTeambitionTaskErrorCode = 'invalid_scope' | 'binding_persist_failed'
 
 export interface ClaimTeambitionTaskResponse {
   sessionId: string
   taskId: string
   /** Whether the session was newly created or pre-existing */
   created: boolean
+  /**
+   * Present when the claim could not complete cleanly. `binding_persist_failed`
+   * means the session was created (sessionId is valid and reusable) but the
+   * binding write failed — retry must reuse the returned sessionId rather than
+   * creating a second session.
+   */
+  errorCode?: ClaimTeambitionTaskErrorCode
+  error?: string
 }
 
 export interface GetTeambitionBindingResponse {

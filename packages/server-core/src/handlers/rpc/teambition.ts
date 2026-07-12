@@ -22,6 +22,20 @@ import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 
+/**
+ * Thrown by getGateway() when the workspace's Teambition source config is
+ * missing, has no MCP URL, or has no userToken — i.e. the user needs to
+ * (re-)authenticate the source. Distinguished from other gateway failures
+ * (network errors, MCP protocol errors) so LIST_TASKS can surface a typed
+ * "needs re-authentication" signal instead of a generic error.
+ */
+export class TeambitionCredentialsMissingError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'TeambitionCredentialsMissingError'
+  }
+}
+
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.teambition.LIST_TASKS,
   RPC_CHANNELS.teambition.CLAIM_TASK,
@@ -50,7 +64,7 @@ async function getGateway(workspaceId: string) {
 
   const config = loadSourceConfig(workspace.rootPath, 'teambition')
   if (!config?.mcp?.url) {
-    throw new Error('Teambition source has no MCP URL configured')
+    throw new TeambitionCredentialsMissingError('Teambition source has no MCP URL configured')
   }
 
   // Strip any existing userToken from the URL — we'll add the fresh one
@@ -61,10 +75,10 @@ async function getGateway(workspaceId: string) {
     getToken: async () => {
       // Re-read config each time so token refreshes are picked up
       const fresh = loadSourceConfig(workspace.rootPath, 'teambition')
-      if (!fresh?.mcp?.url) throw new Error('Teambition source is missing MCP URL')
+      if (!fresh?.mcp?.url) throw new TeambitionCredentialsMissingError('Teambition source is missing MCP URL')
       const url = new URL(fresh.mcp.url)
       const token = url.searchParams.get('userToken')
-      if (!token) throw new Error('Teambition source is missing userToken')
+      if (!token) throw new TeambitionCredentialsMissingError('Teambition source is missing userToken')
       return token
     },
   })
@@ -100,6 +114,10 @@ export function registerTeambitionHandlers(server: RpcServer, deps: HandlerDeps)
         capabilities: [...gateway.capabilities],
       } satisfies ListTeambitionTasksResponse
     } catch (err) {
+      if (err instanceof TeambitionCredentialsMissingError) {
+        log.warn(`TEAMBITION_LIST_TASKS: credentials missing/expired — needsReauth (${err.message})`)
+        return { tasks: [], capabilities: [], needsReauth: true } satisfies ListTeambitionTasksResponse
+      }
       log.error(`TEAMBITION_LIST_TASKS: ${err}`)
       throw err
     }
@@ -122,40 +140,85 @@ export function registerTeambitionHandlers(server: RpcServer, deps: HandlerDeps)
       const { claimBinding, findBindingByTaskId, writeTaskBundle } =
         await import('@craft-agent/teambition-integration')
 
-      // Check existing binding first (idempotent claim)
+      // Step 1: check existing binding first (idempotent claim) — a duplicate
+      // taskId returns the already-bound session instead of creating a new one.
       const existing = await findBindingByTaskId(workspace.rootPath, input.taskId)
       if (existing) {
         return { sessionId: existing.sessionId, taskId: input.taskId, created: false }
       }
 
-      // Fetch task bundle from the gateway
+      // Step 2: fetch the task snapshot from the gateway.
       const gateway = await getGateway(workspaceId)
       const bundle = await gateway.getTaskBundle(input.taskId)
 
-      // Validate scope: feature/bug require a project
-      const projectId =
-        input.scope.type === 'project' ? input.scope.projectId : undefined
+      // Step 3: validate execution scope. Feature/Bug tasks must resolve to a
+      // Craft Project; generic Task supports workspace-only or project scope.
+      const requiresProject = input.kind === 'feature' || input.kind === 'bug'
+      const projectId = input.scope.type === 'project' ? input.scope.projectId.trim() : undefined
+      if (requiresProject && !projectId) {
+        return {
+          sessionId: '',
+          taskId: input.taskId,
+          created: false,
+          errorCode: 'invalid_scope',
+          error: `Teambition ${input.kind} tasks require a Craft Project to claim.`,
+        }
+      }
 
-      // Create the session
-      const session = await deps.sessionManager.createSession(workspaceId, {
-        name: `TW: ${bundle.summary.title}`,
-        projectId,
-      })
+      // Step 4: create the session, unless this is a retry of a claim whose
+      // binding write failed after the session already existed — reuse it so a
+      // retry never produces a second orphaned session for the same task.
+      const session = input.resumeSessionId
+        ? await deps.sessionManager.getSession(input.resumeSessionId)
+        : await deps.sessionManager.createSession(workspaceId, {
+            name: `TW: ${bundle.summary.title}`,
+            ...(projectId ? { projectId } : {}),
+          })
+      if (!session) {
+        throw new Error(`resumeSessionId ${input.resumeSessionId} not found`)
+      }
 
-      // Write task snapshot
+      // Step 5: write the task snapshot (idempotent — safe to re-run on retry).
       await writeTaskBundle(workspace.rootPath, session.id, bundle)
 
-      // Persist binding
-      await claimBinding(workspace.rootPath, {
-        provider: 'teambition',
-        taskId: input.taskId,
-        sessionId: session.id,
-        sourceSlug: 'teambition',
-        state: 'claimed',
-        claimedAt: new Date().toISOString(),
-      })
+      // Step 6: claim the binding. If this fails, the session already exists and
+      // is reusable — return it with a recoverable error instead of throwing, so
+      // the caller can retry with resumeSessionId without creating a duplicate.
+      try {
+        await claimBinding(workspace.rootPath, {
+          provider: 'teambition',
+          taskId: input.taskId,
+          sessionId: session.id,
+          sourceSlug: 'teambition',
+          state: 'claimed',
+          claimedAt: new Date().toISOString(),
+        })
+      } catch (err) {
+        log.error(`TEAMBITION_CLAIM_TASK: binding persist failed for ${input.taskId}: ${err}`)
+        return {
+          sessionId: session.id,
+          taskId: input.taskId,
+          created: !input.resumeSessionId,
+          errorCode: 'binding_persist_failed',
+          error: err instanceof Error ? err.message : String(err),
+        }
+      }
 
-      return { sessionId: session.id, taskId: input.taskId, created: true }
+      // Step 7: send the initial analysis prompt so the session starts working
+      // the task immediately. Best-effort — the claim has already succeeded by
+      // this point (binding + snapshot are persisted), so a prompt-dispatch
+      // failure must not surface as a claim failure.
+      try {
+        await deps.sessionManager.sendMessage(
+          session.id,
+          `Teambition task ${input.taskId} ("${bundle.summary.title}") has been claimed into this session. ` +
+            `Review the task snapshot in this session's data/teambition folder (task.md) and begin analysis.`,
+        )
+      } catch (err) {
+        log.warn(`TEAMBITION_CLAIM_TASK: initial prompt dispatch failed for session ${session.id}: ${err}`)
+      }
+
+      return { sessionId: session.id, taskId: input.taskId, created: !input.resumeSessionId }
     },
   )
 

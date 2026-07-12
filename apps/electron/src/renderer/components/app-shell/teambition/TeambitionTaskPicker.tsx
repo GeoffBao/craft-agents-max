@@ -136,6 +136,16 @@ export function TeambitionTaskPicker({ workspaceId: _workspaceId, projects, onCl
         title: selectedTask.title,
         scope,
       })
+      if (result.errorCode) {
+        // 'binding_persist_failed' still returns a usable sessionId — the session and
+        // snapshot exist, only the binding write failed. Surface the error but still
+        // navigate so the user isn't stuck; a later retry can pass resumeSessionId.
+        toast.error(t('teambition.claim.failed'), { description: result.error })
+        if (result.errorCode === 'binding_persist_failed' && result.sessionId) {
+          onClaimed(result.sessionId, result.taskId)
+        }
+        return
+      }
       toast.success(
         result.created
           ? t('teambition.claim.created', { taskId: selectedTask.taskId })

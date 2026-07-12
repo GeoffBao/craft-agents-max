@@ -1,4 +1,12 @@
-import { describe, expect, it } from 'bun:test'
+import { describe, expect, it, mock } from 'bun:test'
+import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
+import type { HandlerFn, RequestContext, RpcServer } from '../../transport/types'
+import type { HandlerDeps } from '../handler-deps'
+import type {
+  ClaimTeambitionTaskRequest,
+  ClaimTeambitionTaskResponse,
+  ListTeambitionTasksResponse,
+} from '@craft-agent/shared/protocol/dto'
 
 // ---------------------------------------------------------------------------
 // Unit tests for sync-policy integration with handler logic.
@@ -280,5 +288,308 @@ describe('Teambition sync — sync log entry', () => {
     expect(entry.result).toBe('error')
     expect(entry.error).toBe('Network timeout')
     expect(entry.requestId).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Handler-level tests for CLAIM_TASK / LIST_TASKS (Task 4).
+//
+// Mocks the two dynamically-imported modules the handlers pull in at call
+// time (`@craft-agent/shared/config` and `@craft-agent/teambition-integration`)
+// so registerTeambitionHandlers() can be exercised end-to-end against a fake
+// RpcServer + HandlerDeps without a real workspace, MCP connection, or
+// filesystem.
+// ---------------------------------------------------------------------------
+
+const FAKE_WORKSPACE = { id: 'ws-1', name: 'Test', slug: 'test', rootPath: '/tmp/fake-ws', createdAt: 0 }
+
+let bindingsStore: Array<{ provider: 'teambition'; taskId: string; sessionId: string; sourceSlug: string; state: 'claimed'; claimedAt: string }> = []
+let claimBindingShouldThrow = false
+let gatewayShouldThrowCredentialsMissing = false
+let taskBundleByTaskId: Record<string, { summary: { taskId: string; title: string; kind: string; updatedAt: string; projectId?: string } }> = {}
+
+mock.module('@craft-agent/shared/config', () => ({
+  getWorkspaceByNameOrId: (id: string) => (id === FAKE_WORKSPACE.id ? FAKE_WORKSPACE : null),
+}))
+
+mock.module('@craft-agent/shared/sources', () => ({
+  loadSourceConfig: () => ({ mcp: { url: 'https://tw.example.com/api/mcp?userToken=fake-token' } }),
+}))
+
+mock.module('@craft-agent/teambition-integration', () => ({
+  findBindingByTaskId: async (_root: string, taskId: string) =>
+    bindingsStore.find((b) => b.taskId === taskId),
+  claimBinding: async (_root: string, binding: (typeof bindingsStore)[number]) => {
+    if (claimBindingShouldThrow) throw new Error('disk full')
+    const existing = bindingsStore.find((b) => b.taskId === binding.taskId)
+    if (existing) return existing
+    bindingsStore.push(binding)
+    return binding
+  },
+  loadBindings: async (_root: string) => bindingsStore,
+  writeTaskBundle: async () => {},
+  createUserMcpGateway: async () => {
+    if (gatewayShouldThrowCredentialsMissing) {
+      const { TeambitionCredentialsMissingError } = await import('./teambition')
+      throw new TeambitionCredentialsMissingError('no token')
+    }
+    return {
+      capabilities: ['identity', 'task.list', 'task.detail'],
+      getCurrentUser: async () => ({ userId: 'u1', displayName: 'Test User' }),
+      listMyTasks: async () => Object.values(taskBundleByTaskId).map((b) => b.summary),
+      getTaskBundle: async (taskId: string) => {
+        const found = taskBundleByTaskId[taskId]
+        if (!found) throw new Error(`unknown task ${taskId}`)
+        return { ...found, comments: [] }
+      },
+      addProgress: async () => ({ taskId: '', syncedAt: new Date().toISOString(), changed: true }),
+      updateWorkflowStatus: async () => ({ taskId: '', syncedAt: new Date().toISOString(), changed: true }),
+      addComment: async () => ({ taskId: '', syncedAt: new Date().toISOString(), changed: true }),
+    }
+  },
+}))
+
+function createHarness() {
+  const handlers = new Map<string, HandlerFn>()
+  const sentMessages: Array<{ sessionId: string; message: string }> = []
+  const createdSessions: Array<{ workspaceId: string; options: unknown }> = []
+  let sessionCounter = 0
+
+  const server: RpcServer = {
+    handle(channel, handler) {
+      handlers.set(channel, handler)
+    },
+    push() {},
+    async invokeClient() {
+      return undefined
+    },
+    hasClientCapability() {
+      return false
+    },
+    findClientsWithCapability() {
+      return []
+    },
+  }
+
+  const sessionsById = new Map<string, { id: string; workspaceId: string; workspaceName: string; lastMessageAt: number; messages: never[]; isProcessing: boolean }>()
+
+  const deps: HandlerDeps = {
+    sessionManager: {
+      createSession: async (workspaceId: string, options?: unknown) => {
+        sessionCounter += 1
+        const id = `session-${sessionCounter}`
+        createdSessions.push({ workspaceId, options })
+        const session = { id, workspaceId, workspaceName: 'Test', lastMessageAt: 0, messages: [], isProcessing: false }
+        sessionsById.set(id, session)
+        return session as never
+      },
+      getSession: async (sessionId: string) => (sessionsById.get(sessionId) ?? null) as never,
+      sendMessage: async (sessionId: string, message: string) => {
+        sentMessages.push({ sessionId, message })
+      },
+    } as unknown as HandlerDeps['sessionManager'],
+    oauthFlowStore: {} as HandlerDeps['oauthFlowStore'],
+    platform: {
+      appRootPath: '/',
+      resourcesPath: '/',
+      isPackaged: false,
+      appVersion: '0.0.0-test',
+      isDebugMode: true,
+      logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+      imageProcessor: { getMetadata: async () => null, process: async () => Buffer.from('') },
+    } as HandlerDeps['platform'],
+  }
+
+  return { server, deps, handlers, sentMessages, createdSessions }
+}
+
+const ctx: RequestContext = { clientId: 'client-1', workspaceId: FAKE_WORKSPACE.id, webContentsId: 1 }
+
+describe('registerTeambitionHandlers — CLAIM_TASK', () => {
+  it('rejects a Feature task without a Craft Project', async () => {
+    const { registerTeambitionHandlers } = await import('./teambition')
+    bindingsStore = []
+    taskBundleByTaskId = {
+      'tw-fixture-1': { summary: { taskId: 'tw-fixture-1', title: 'Fix login', kind: 'feature', updatedAt: '2026-07-12T10:00:00.000Z', projectId: 'tw-project-1' } },
+    }
+    const { server, deps, handlers } = createHarness()
+    registerTeambitionHandlers(server, deps)
+    const claim = handlers.get(RPC_CHANNELS.teambition.CLAIM_TASK)!
+
+    const req: ClaimTeambitionTaskRequest = {
+      workspaceId: FAKE_WORKSPACE.id,
+      taskId: 'tw-fixture-1',
+      kind: 'feature',
+      title: 'Fix login',
+      scope: { type: 'workspace' },
+    }
+    const result: ClaimTeambitionTaskResponse = await claim(ctx, FAKE_WORKSPACE.id, req)
+
+    expect(result.errorCode).toBe('invalid_scope')
+    expect(result.sessionId).toBe('')
+  })
+
+  it('rejects a Bug task without a Craft Project', async () => {
+    const { registerTeambitionHandlers } = await import('./teambition')
+    bindingsStore = []
+    taskBundleByTaskId = {
+      'tw-fixture-2': { summary: { taskId: 'tw-fixture-2', title: 'Crash on save', kind: 'bug', updatedAt: '2026-07-12T10:00:00.000Z', projectId: 'tw-project-1' } },
+    }
+    const { server, deps, handlers } = createHarness()
+    registerTeambitionHandlers(server, deps)
+    const claim = handlers.get(RPC_CHANNELS.teambition.CLAIM_TASK)!
+
+    const req: ClaimTeambitionTaskRequest = {
+      workspaceId: FAKE_WORKSPACE.id,
+      taskId: 'tw-fixture-2',
+      kind: 'bug',
+      title: 'Crash on save',
+      scope: { type: 'workspace' },
+    }
+    const result: ClaimTeambitionTaskResponse = await claim(ctx, FAKE_WORKSPACE.id, req)
+
+    expect(result.errorCode).toBe('invalid_scope')
+  })
+
+  it('allows a generic Task to claim workspace-only (no project)', async () => {
+    const { registerTeambitionHandlers } = await import('./teambition')
+    bindingsStore = []
+    taskBundleByTaskId = {
+      'tw-fixture-3': { summary: { taskId: 'tw-fixture-3', title: 'Update docs', kind: 'task', updatedAt: '2026-07-12T10:00:00.000Z' } },
+    }
+    const { server, deps, handlers, sentMessages, createdSessions } = createHarness()
+    registerTeambitionHandlers(server, deps)
+    const claim = handlers.get(RPC_CHANNELS.teambition.CLAIM_TASK)!
+
+    const req: ClaimTeambitionTaskRequest = {
+      workspaceId: FAKE_WORKSPACE.id,
+      taskId: 'tw-fixture-3',
+      kind: 'task',
+      title: 'Update docs',
+      scope: { type: 'workspace' },
+    }
+    const result: ClaimTeambitionTaskResponse = await claim(ctx, FAKE_WORKSPACE.id, req)
+
+    expect(result.errorCode).toBeUndefined()
+    expect(result.created).toBe(true)
+    expect(result.sessionId).toBeTruthy()
+    expect(createdSessions).toHaveLength(1)
+    expect((createdSessions[0]!.options as { projectId?: string }).projectId).toBeUndefined()
+    // Initial analysis prompt was dispatched
+    expect(sentMessages).toHaveLength(1)
+    expect(sentMessages[0]!.sessionId).toBe(result.sessionId)
+  })
+
+  it('claims a generic Task into a Craft Project when project scope is chosen', async () => {
+    const { registerTeambitionHandlers } = await import('./teambition')
+    bindingsStore = []
+    taskBundleByTaskId = {
+      'tw-fixture-4': { summary: { taskId: 'tw-fixture-4', title: 'Refactor auth', kind: 'task', updatedAt: '2026-07-12T10:00:00.000Z' } },
+    }
+    const { server, deps, handlers, createdSessions } = createHarness()
+    registerTeambitionHandlers(server, deps)
+    const claim = handlers.get(RPC_CHANNELS.teambition.CLAIM_TASK)!
+
+    const req: ClaimTeambitionTaskRequest = {
+      workspaceId: FAKE_WORKSPACE.id,
+      taskId: 'tw-fixture-4',
+      kind: 'task',
+      title: 'Refactor auth',
+      scope: { type: 'project', projectId: 'craft-project-1' },
+    }
+    const result: ClaimTeambitionTaskResponse = await claim(ctx, FAKE_WORKSPACE.id, req)
+
+    expect(result.errorCode).toBeUndefined()
+    expect((createdSessions[0]!.options as { projectId?: string }).projectId).toBe('craft-project-1')
+  })
+
+  it('returns the existing session for a duplicate task ID instead of creating a second one', async () => {
+    const { registerTeambitionHandlers } = await import('./teambition')
+    bindingsStore = []
+    taskBundleByTaskId = {
+      'tw-fixture-5': { summary: { taskId: 'tw-fixture-5', title: 'Add export', kind: 'feature', updatedAt: '2026-07-12T10:00:00.000Z', projectId: 'tw-project-1' } },
+    }
+    const { server, deps, handlers, createdSessions } = createHarness()
+    registerTeambitionHandlers(server, deps)
+    const claim = handlers.get(RPC_CHANNELS.teambition.CLAIM_TASK)!
+
+    const req: ClaimTeambitionTaskRequest = {
+      workspaceId: FAKE_WORKSPACE.id,
+      taskId: 'tw-fixture-5',
+      kind: 'feature',
+      title: 'Add export',
+      scope: { type: 'project', projectId: 'craft-project-1' },
+    }
+    const first = await claim(ctx, FAKE_WORKSPACE.id, req)
+    const second = await claim(ctx, FAKE_WORKSPACE.id, req)
+
+    expect(createdSessions).toHaveLength(1)
+    expect(second.sessionId).toBe(first.sessionId)
+    expect(second.created).toBe(false)
+  })
+
+  it('returns a recoverable binding_persist_failed error without losing the created session', async () => {
+    const { registerTeambitionHandlers } = await import('./teambition')
+    bindingsStore = []
+    claimBindingShouldThrow = true
+    taskBundleByTaskId = {
+      'tw-fixture-6': { summary: { taskId: 'tw-fixture-6', title: 'Flaky disk', kind: 'task', updatedAt: '2026-07-12T10:00:00.000Z' } },
+    }
+    const { server, deps, handlers, createdSessions } = createHarness()
+    registerTeambitionHandlers(server, deps)
+    const claim = handlers.get(RPC_CHANNELS.teambition.CLAIM_TASK)!
+
+    const req: ClaimTeambitionTaskRequest = {
+      workspaceId: FAKE_WORKSPACE.id,
+      taskId: 'tw-fixture-6',
+      kind: 'task',
+      title: 'Flaky disk',
+      scope: { type: 'workspace' },
+    }
+    const result = await claim(ctx, FAKE_WORKSPACE.id, req)
+
+    expect(result.errorCode).toBe('binding_persist_failed')
+    expect(result.sessionId).toBeTruthy()
+    expect(createdSessions).toHaveLength(1)
+
+    claimBindingShouldThrow = false
+  })
+})
+
+describe('registerTeambitionHandlers — LIST_TASKS', () => {
+  it('returns needsReauth when Teambition credentials are missing', async () => {
+    const { registerTeambitionHandlers } = await import('./teambition')
+    gatewayShouldThrowCredentialsMissing = true
+    const { server, deps, handlers } = createHarness()
+    registerTeambitionHandlers(server, deps)
+    const list = handlers.get(RPC_CHANNELS.teambition.LIST_TASKS)!
+
+    const result: ListTeambitionTasksResponse = await list(ctx, FAKE_WORKSPACE.id)
+
+    expect(result.needsReauth).toBe(true)
+    expect(result.tasks).toEqual([])
+    expect(result.capabilities).toEqual([])
+
+    gatewayShouldThrowCredentialsMissing = false
+  })
+
+  it('lists tasks with binding state joined in', async () => {
+    const { registerTeambitionHandlers } = await import('./teambition')
+    bindingsStore = [
+      { provider: 'teambition', taskId: 'tw-fixture-7', sessionId: 'session-existing', sourceSlug: 'teambition', state: 'claimed', claimedAt: '2026-07-12T09:00:00.000Z' },
+    ]
+    taskBundleByTaskId = {
+      'tw-fixture-7': { summary: { taskId: 'tw-fixture-7', title: 'Bound task', kind: 'task', updatedAt: '2026-07-12T10:00:00.000Z' } },
+    }
+    const { server, deps, handlers } = createHarness()
+    registerTeambitionHandlers(server, deps)
+    const list = handlers.get(RPC_CHANNELS.teambition.LIST_TASKS)!
+
+    const result: ListTeambitionTasksResponse = await list(ctx, FAKE_WORKSPACE.id)
+
+    expect(result.needsReauth).toBeUndefined()
+    expect(result.tasks).toHaveLength(1)
+    expect(result.tasks[0]!.hasBinding).toBe(true)
+    expect(result.tasks[0]!.sessionId).toBe('session-existing')
   })
 })

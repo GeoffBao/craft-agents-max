@@ -15,9 +15,32 @@ Task 3: complete (working tree, pre-commit)
 - Research memo findings incorporated: no hardcoded tool prefix, case/style-insensitive matching, token expiry as normal event, credential redaction on agentInstructions
 - See .superpowers/sdd/task-3-brief.md, task-3-report.md, task-3-research-memo.md
 
-Task 4: pending (RPC skeleton in place for Task 5)
-- DTO types + channels + preload stubs done as part of Task 5
-- Handler implementations still need TeambitionGateway + SessionManager wiring
+Task 4: complete (committed after Task 3, ahead of the Task 5/6 commits it was
+previously entangled with)
+- Found the RPC skeleton (channels/dto/handler/preload) already scaffolded by a prior
+  session's Task 5/6 work, but several spec-level guarantees were unmet:
+  routing.ts never classified the 7 teambition:* channels (routing.test.ts was
+  failing), claim handler didn't validate execution scope, didn't send the initial
+  analysis prompt, and had no recoverable path for a binding-persist failure after
+  session creation; listMyTasks had no typed re-auth signal.
+- Fixed routing.ts classification (REMOTE_ELIGIBLE, next to projects.*).
+- Added TeambitionCredentialsMissingError; LIST_TASKS now returns
+  { needsReauth: true } instead of throwing when credentials are missing.
+- Rewrote CLAIM_TASK to the plan's 7-step order: existing-binding check → fetch
+  bundle → validate scope (Feature/Bug require project, else errorCode:
+  'invalid_scope') → create-or-resume session (resumeSessionId added to DTO for
+  retry-safety) → write snapshot → claim binding (failure → errorCode:
+  'binding_persist_failed' with the session id preserved) → best-effort initial
+  prompt dispatch.
+- Updated TeambitionTaskPicker.tsx to branch on the new errorCode field.
+- Added 8 new handler-level tests (mock.module on the dynamic imports) covering
+  scope rejection, workspace-only + project-scoped claims, duplicate-taskId
+  idempotency, recoverable binding failure, and needsReauth/binding-join listing.
+- Verified: teambition.test.ts (23 pass) + server-core typecheck + electron
+  typecheck all clean; routing.test.ts now 8/8 pass (was 2 fail); no regressions in
+  teambition-integration (49 pass), e2e.test.ts (1 pass), or TeambitionTaskPicker
+  renderer tests (12 pass).
+- See .superpowers/sdd/task-4-brief.md, task-4-report.md
 
 Task 5: complete (committed a58f719c)
 - Files: TeambitionTaskPicker.tsx, TeambitionTaskBadge.tsx, TeambitionTaskActions.tsx, atoms/teambition.ts, test

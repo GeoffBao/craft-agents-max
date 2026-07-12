@@ -424,6 +424,15 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.projects.DELETE_ASSET,
   RPC_CHANNELS.projects.CHANGED,
 
+  // teambition — workspace-scoped task claim/list/sync operations
+  RPC_CHANNELS.teambition.LIST_TASKS,
+  RPC_CHANNELS.teambition.CLAIM_TASK,
+  RPC_CHANNELS.teambition.GET_BINDING,
+  RPC_CHANNELS.teambition.CAPABILITIES,
+  RPC_CHANNELS.teambition.SYNC_PROGRESS,
+  RPC_CHANNELS.teambition.UPDATE_STATUS,
+  RPC_CHANNELS.teambition.BIND_PROJECT,
+
   // git — workspace filesystem
   RPC_CHANNELS.git.GET_BRANCH,
 
