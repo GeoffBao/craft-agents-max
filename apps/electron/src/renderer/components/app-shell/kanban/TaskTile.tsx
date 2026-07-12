@@ -75,6 +75,8 @@ interface TaskTileProps {
   subtaskModelGroups?: KanbanModelProviderGroup[]
   /** Model id pre-selected in the composer (defaults to the first catalog model). */
   defaultSubtaskModel?: string
+  /** Active workspace id — required to drive Teambition sync actions on bound tiles. */
+  workspaceId?: string
 }
 
 /**
@@ -101,6 +103,7 @@ export function TaskTile({
   onRunSubtasks,
   subtaskModelGroups,
   defaultSubtaskModel,
+  workspaceId,
 }: TaskTileProps) {
   const { t } = useTranslation()
   const livePulseEnabled = useAtomValue(kanbanLivePulseAtom)
@@ -313,9 +316,11 @@ export function TaskTile({
         <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-border/40 pt-2">
           <div className="flex items-center gap-1.5">
             <ModelChip model={task.model} />
-            {task.teambition && (
+            {task.teambition && workspaceId && (
               <TeambitionTaskActions
                 taskId={task.teambition.taskId}
+                sessionId={task.id}
+                workspaceId={workspaceId}
                 kind={task.teambition.kind}
                 syncState={task.teambition.syncState}
                 capabilities={[]}

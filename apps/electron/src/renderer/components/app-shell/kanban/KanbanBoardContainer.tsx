@@ -656,6 +656,7 @@ export function KanbanBoardContainer() {
           onMoveTask={handleMoveTask}
           columnDropStatus={columnStatus}
           onSelectDropStatus={handleSelectDropStatus}
+          workspaceId={activeWorkspaceId ?? undefined}
           {...(editingProject
             ? {
                 onUpdateColumn: handleUpdateColumn,

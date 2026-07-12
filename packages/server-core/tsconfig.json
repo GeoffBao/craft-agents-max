@@ -20,7 +20,9 @@
     "baseUrl": ".",
     "paths": {
       "@craft-agent/shared": ["../shared/src/index.ts"],
-      "@craft-agent/shared/*": ["../shared/src/*"]
+      "@craft-agent/shared/*": ["../shared/src/*"],
+      "@craft-agent/teambition-integration": ["../teambition-integration/src/index.ts"],
+      "@craft-agent/teambition-integration/*": ["../teambition-integration/src/*"]
     }
   },
   "include": ["src/**/*", "../shared/src/agent/bash-parser.d.ts"],

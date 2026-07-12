@@ -247,7 +247,9 @@ export function TeambitionTaskPicker({ workspaceId: _workspaceId, projects, onCl
                         {task.taskId}
                       </span>
                       {task.hasBinding && (
-                        <CheckCircle className="h-3 w-3 text-emerald-500" title={t('teambition.claim.alreadyClaimed')} />
+                        <CheckCircle className="h-3 w-3 text-emerald-500">
+                          <title>{t('teambition.claim.alreadyClaimed')}</title>
+                        </CheckCircle>
                       )}
                     </div>
                     <div className="mt-1 text-[13px] font-medium leading-snug text-foreground/85 line-clamp-2">

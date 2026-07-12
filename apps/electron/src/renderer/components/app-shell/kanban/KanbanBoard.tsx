@@ -64,6 +64,8 @@ interface KanbanBoardProps {
   onRemoveColumn?: (columnId: string) => void
   /** Append a new custom column (single-project edit mode). Renders the "add column" affordance. */
   onAddColumn?: () => void
+  /** Active workspace id — required to drive Teambition sync actions on bound tiles. */
+  workspaceId?: string
 }
 
 /**
@@ -97,6 +99,7 @@ export function KanbanBoard({
   onUpdateColumn,
   onRemoveColumn,
   onAddColumn,
+  workspaceId,
 }: KanbanBoardProps) {
   const { t } = useTranslation()
   const firstColumnId = columns[0]?.id
@@ -173,6 +176,7 @@ export function KanbanBoard({
             onRunSubtasks={onRunSubtasks}
             subtaskModelGroups={subtaskModelGroups}
             defaultSubtaskModel={defaultSubtaskModel}
+            workspaceId={workspaceId}
             onCreateTask={index === 0 ? onCreateTask : undefined}
             dropStatusId={column.dropStatusId ?? columnDropStatus?.[column.id]}
             onSelectDropStatus={
@@ -208,6 +212,7 @@ export function KanbanBoard({
               status={statusesById.get(activeTask.statusId)}
               treatment={treatment}
               expanded={expandedTaskIds.has(activeTask.id)}
+              workspaceId={workspaceId}
             />
           </div>
         ) : null}

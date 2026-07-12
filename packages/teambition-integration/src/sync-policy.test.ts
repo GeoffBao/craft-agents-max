@@ -277,8 +277,8 @@ describe('sync policy integration', () => {
     })
 
     expect(state.log).toHaveLength(1)
-    expect(state.log[0].result).toBe('synced')
-    expect(state.log[0].fingerprint).toBe(fingerprint)
+    expect(state.log[0]!.result).toBe('synced')
+    expect(state.log[0]!.fingerprint).toBe(fingerprint)
   })
 
   it('deduplicates a repeated identical sync attempt', () => {

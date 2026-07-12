@@ -36,7 +36,7 @@ function makeTask(overrides: Partial<RendererTaskSummary> = {}): RendererTaskSum
   }
 }
 
-function mockElectronAPI(overrides: Partial<typeof globalThis.electronAPI> = {}) {
+function mockElectronAPI(overrides: Partial<Window['electronAPI']> = {}) {
   const defaults = {
     listTeambitionTasks: async (_workspaceId: string): Promise<ListTeambitionTasksResponse> => ({
       tasks: [],
@@ -113,7 +113,7 @@ describe('Teambition task scope rules', () => {
   it('returns existing session for duplicate task claim', async () => {
     let callCount = 0
     mockElectronAPI({
-      claimTeambitionTask: async (_ws, _input) => {
+      claimTeambitionTask: async (_ws: string, _input: ClaimTeambitionTaskRequest) => {
         callCount++
         // First call creates, second returns existing
         return {

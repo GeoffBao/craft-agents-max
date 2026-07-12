@@ -24,7 +24,7 @@ Task 5: complete (committed a58f719c)
 - 12 tests PASS (scope rules, capabilities, view-model join)
 - See .superpowers/sdd/task-5-brief.md, task-5-report.md
 
-Task 6: complete (working tree, ready to commit)
+Task 6: complete (commit 8c0f7c3f)
 - Files: sync-policy.ts, sync-policy.test.ts, teambition.ts (handler rewrite), teambition.test.ts
 - New sync-policy module: conflict detection, fingerprint dedup, idempotency, sync logging
 - 31 new tests (16 sync-policy + 15 handler patterns)
@@ -33,3 +33,36 @@ Task 6: complete (working tree, ready to commit)
 - RPC index: registerTeambitionHandlers added
 - Preload: channel-map + ElectronAPI types for 3 new sync operations
 - See .superpowers/sdd/task-6-brief.md, task-6-report.md
+
+Task 7: complete (e2e test committed; typecheck-fix commit follow-up)
+- Files: fixtures/redacted-task-bundle.json, fixtures/redacted-tool-list.json, e2e.test.ts
+- FakeTeambitionGateway-backed offline e2e test: list → claim → duplicate claim (idempotent,
+  1 session) → sync progress (synced) → stale update (conflict, no write call) — 1 pass, 16 assertions
+- typecheck:all sweep surfaced pre-existing Task 5/6 type errors never caught by package-local
+  tsc: duplicate SyncLogEntry export, missing @craft-agent/teambition-integration tsconfig path
+  mappings in server-core/server/electron, literal-type test comparisons, TaskTile missing
+  sessionId/workspaceId props (workspaceId never threaded through Kanban tree), lucide icon
+  title prop, globalThis.electronAPI test typing — all fixed
+- Confirmed via git stash: packages/session-tools-core + pi-agent-server tsconfig.base.json /
+  keyv-cacheable-request @types failures are pre-existing environment issues, unrelated to
+  Teambition, present identically before this task — recorded separately, not fixed (out of scope)
+- Verified clean: teambition-integration, server-core, server, electron, ui all pass tsc --noEmit
+- Branch boundary verified: git diff --name-only main...HEAD stays within Teambition scope;
+  bun.lock and .cursor/ remain unstaged
+- See .superpowers/sdd/task-7-brief.md, task-7-report.md
+
+---
+
+## All 7 tasks complete — one-line summary each
+
+1. Domain contract: task kinds, execution scope, TeambitionGateway interface, capability enum.
+2. Storage: atomic binding persistence, redacted task-bundle snapshots, append-only sync log.
+3. MCP gateway: style-insensitive capability probing, runtime-only token handling, credential redaction.
+4. RPC read/claim layer: listMyTasks/claimTask/getBinding/capabilities wired to SessionManager.
+5. Kanban UI: task picker, badges, explicit actions, view-model join — no second board.
+6. Explicit sync: syncProgress/updateStatus/bindProject with conflict + idempotency guards.
+7. End-to-end verification: offline fixture-backed e2e proof + typecheck:all safety net across
+   the full Teambition dependency chain; environment-only failures identified and excluded.
+
+MVP functionally complete on 260705-agent. Open API/Webhook integration is explicitly deferred
+to a separate future plan (no polling, no webhook ingestion, no automatic worktime submission).

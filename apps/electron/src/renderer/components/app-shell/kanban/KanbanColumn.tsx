@@ -41,6 +41,8 @@ interface KanbanColumnProps {
   subtaskModelGroups?: KanbanModelProviderGroup[]
   /** Model id pre-selected in the composer. */
   defaultSubtaskModel?: string
+  /** Active workspace id — required to drive Teambition sync actions on bound tiles. */
+  workspaceId?: string
   /** When present, renders the inline "New Task" composer at the top of the column. */
   onCreateTask?: (title: string) => void
   /** Status auto-applied to a task dropped into this column (empty/undefined = leave untouched). */
@@ -73,6 +75,7 @@ export function KanbanColumn({
   onRunSubtasks,
   subtaskModelGroups,
   defaultSubtaskModel,
+  workspaceId,
   onCreateTask,
   dropStatusId,
   onSelectDropStatus,
@@ -136,6 +139,7 @@ export function KanbanColumn({
               onRunSubtasks={onRunSubtasks ? () => onRunSubtasks(task.id) : undefined}
               subtaskModelGroups={subtaskModelGroups}
               defaultSubtaskModel={defaultSubtaskModel}
+              workspaceId={workspaceId}
             />
           </DraggableTile>
         ))}

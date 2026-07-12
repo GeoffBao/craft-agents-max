@@ -148,35 +148,38 @@ describe('Teambition RPC handler — update status', () => {
 })
 
 describe('Teambition RPC handler — bind project', () => {
+  const requiresProject = (kind: 'feature' | 'bug' | 'task'): boolean =>
+    (['feature', 'bug'] as const).includes(kind as 'feature' | 'bug')
+
   it('rejects binding feature task to empty project', () => {
-    const kind = 'feature'
+    const kind: 'feature' | 'bug' | 'task' = 'feature'
     const projectId: string | null = null
 
-    const shouldReject = (kind === 'feature' || kind === 'bug') && !projectId
+    const shouldReject = requiresProject(kind) && !projectId
     expect(shouldReject).toBe(true)
   })
 
   it('rejects binding bug task to empty project', () => {
-    const kind = 'bug'
+    const kind: 'feature' | 'bug' | 'task' = 'bug'
     const projectId: string | null = null
 
-    const shouldReject = (kind === 'feature' || kind === 'bug') && !projectId
+    const shouldReject = requiresProject(kind) && !projectId
     expect(shouldReject).toBe(true)
   })
 
   it('allows binding generic task to empty project (workspace-only)', () => {
-    const kind = 'task'
+    const kind: 'feature' | 'bug' | 'task' = 'task'
     const projectId: string | null = null
 
-    const shouldReject = (kind === 'feature' || kind === 'bug') && !projectId
+    const shouldReject = requiresProject(kind) && !projectId
     expect(shouldReject).toBe(false)
   })
 
   it('allows binding generic task to a project', () => {
-    const kind = 'task'
+    const kind: 'feature' | 'bug' | 'task' = 'task'
     const projectId = 'craft-project-1'
 
-    const shouldReject = (kind === 'feature' || kind === 'bug') && !projectId
+    const shouldReject = requiresProject(kind) && !projectId
     expect(shouldReject).toBe(false)
     expect(projectId).toBeTruthy()
   })
