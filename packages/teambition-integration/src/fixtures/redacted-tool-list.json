@@ -1,0 +1,9 @@
+[
+  { "name": "get_current_user" },
+  { "name": "task_list_v2" },
+  { "name": "task_detail_3" },
+  { "name": "progress_read_v3" },
+  { "name": "progress_create_v2" },
+  { "name": "task_update_status" },
+  { "name": "comment_add" }
+]

@@ -1,0 +1,33 @@
+{
+  "summary": {
+    "taskId": "tw-fixture-100",
+    "title": "Fixture: stabilize login retry flow",
+    "kind": "bug",
+    "projectId": "tw-project-1",
+    "updatedAt": "2026-07-12T10:00:00.000Z"
+  },
+  "comments": [
+    {
+      "commentId": "fixture-comment-1",
+      "content": "Reproduced on staging with a fixture account.",
+      "createdAt": "2026-07-12T09:00:00.000Z"
+    }
+  ],
+  "progress": {
+    "percent": 20,
+    "updatedAt": "2026-07-12T09:30:00.000Z",
+    "note": "Initial triage complete."
+  },
+  "description": "Fixture-only task bundle used for offline end-to-end verification. Contains no real URLs, tokens, or personal data.",
+  "attachments": [
+    { "name": "fixture-log.txt", "url": "[redacted-url]" }
+  ],
+  "sourceMetadata": {
+    "sourceSlug": "teambition",
+    "requestId": "req-fixture-100"
+  },
+  "agentInstructions": [
+    "Follow the fixture task exactly.",
+    "Do not expose credentials."
+  ]
+}
