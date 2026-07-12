@@ -139,7 +139,8 @@ acceptance conclusion below for how to handle them.
 
 ## Final acceptance conclusion
 
-**Deliverable status: Ready for review, with one follow-up commit needed.**
+**Deliverable status: Complete.** The e2e commit and the follow-up typecheck-fix commit are
+already present in the branch (`3b1148de` and `1e1a2fb3`).
 
 - The core Task 7 deliverable — offline, fixture-backed e2e verification — is complete and
   passing (1/1 test, 16 assertions, exact scenario from the plan: list → claim → duplicate
@@ -151,7 +152,7 @@ acceptance conclusion below for how to handle them.
   and this entire feature branch — confirmed via `git stash` diffing against commit `8c0f7c3f`.
 - Branch boundary is clean: no files outside Teambition integration/RPC/preload/renderer/
   i18n/tests/docs were touched; `bun.lock` and `.cursor/` remain excluded.
-- **Two commits are needed to land this cleanly**: (1) the plan's specified
+- **Two commits were needed to land this cleanly and are now present**: (1) the plan's specified
   `test: verify Teambition task handoff flow` commit (fixtures + e2e test only), and (2) a
   separate `fix:` commit for the typecheck-only corrections (tsconfig/package.json module
   wiring across server-core/server/electron, TaskTile workspaceId threading, and three

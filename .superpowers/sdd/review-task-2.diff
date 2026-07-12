@@ -1,0 +1,415 @@
+# Review package: 8144c561..5c67f89004b874590cf0a85c67fe6385918806dc
+
+## Commits
+5c67f890 feat: persist Teambition bindings and snapshots
+
+## Files changed
+ packages/teambition-integration/src/bindings.ts    |  65 ++++++++
+ packages/teambition-integration/src/index.ts       |   2 +
+ .../teambition-integration/src/storage.test.ts     | 139 +++++++++++++++++
+ packages/teambition-integration/src/task-bundle.ts | 171 +++++++++++++++++++++
+ 4 files changed, 377 insertions(+)
+
+## Diff
+diff --git a/packages/teambition-integration/src/bindings.ts b/packages/teambition-integration/src/bindings.ts
+new file mode 100644
+index 00000000..d6dd6ae1
+--- /dev/null
++++ b/packages/teambition-integration/src/bindings.ts
+@@ -0,0 +1,65 @@
++import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
++import { join } from 'node:path'
++
++export interface StoredTeambitionBinding {
++  provider: 'teambition'
++  taskId: string
++  sessionId: string
++  sourceSlug: string
++  state: 'claimed'
++  claimedAt: string
++}
++
++const INTEGRATION_DIR = ['integrations', 'teambition'] as const
++const BINDINGS_FILE = 'bindings.json'
++
++function bindingsDir(workspaceRoot: string): string {
++  return join(workspaceRoot, ...INTEGRATION_DIR)
++}
++
++function bindingsPath(workspaceRoot: string): string {
++  return join(bindingsDir(workspaceRoot), BINDINGS_FILE)
++}
++
++async function writeBindingsFile(filePath: string, bindings: StoredTeambitionBinding[]): Promise<void> {
++  const tempPath = `${filePath}.tmp`
++  await writeFile(tempPath, JSON.stringify(bindings, null, 2), 'utf-8')
++  await rename(tempPath, filePath)
++}
++
++export async function loadBindings(workspaceRoot: string): Promise<StoredTeambitionBinding[]> {
++  try {
++    const raw = await readFile(bindingsPath(workspaceRoot), 'utf-8')
++    const parsed = JSON.parse(raw)
++    return Array.isArray(parsed) ? (parsed as StoredTeambitionBinding[]) : []
++  } catch {
++    return []
++  }
++}
++
++export async function claimBinding(
++  workspaceRoot: string,
++  binding: StoredTeambitionBinding,
++): Promise<StoredTeambitionBinding> {
++  const dir = bindingsDir(workspaceRoot)
++  const filePath = bindingsPath(workspaceRoot)
++  await mkdir(dir, { recursive: true })
++
++  const bindings = await loadBindings(workspaceRoot)
++  const existing = bindings.find((entry) => entry.taskId === binding.taskId)
++  if (existing) {
++    return existing
++  }
++
++  bindings.push(binding)
++  await writeBindingsFile(filePath, bindings)
++  return binding
++}
++
++export async function findBindingByTaskId(
++  workspaceRoot: string,
++  taskId: string,
++): Promise<StoredTeambitionBinding | undefined> {
++  const bindings = await loadBindings(workspaceRoot)
++  return bindings.find((binding) => binding.taskId === taskId)
++}
+diff --git a/packages/teambition-integration/src/index.ts b/packages/teambition-integration/src/index.ts
+index cda5464c..8293da2d 100644
+--- a/packages/teambition-integration/src/index.ts
++++ b/packages/teambition-integration/src/index.ts
+@@ -1,2 +1,4 @@
+ export * from './domain'
+ export * from './gateway'
++export * from './bindings'
++export * from './task-bundle'
+diff --git a/packages/teambition-integration/src/storage.test.ts b/packages/teambition-integration/src/storage.test.ts
+new file mode 100644
+index 00000000..825c79b8
+--- /dev/null
++++ b/packages/teambition-integration/src/storage.test.ts
+@@ -0,0 +1,139 @@
++import { afterEach, describe, expect, it } from 'bun:test'
++import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
++import { join } from 'node:path'
++import { tmpdir } from 'node:os'
++import type { ExternalTaskBundle } from './domain'
++import {
++  appendSyncLog,
++  claimBinding,
++  findBindingByTaskId,
++  loadBindings,
++  writeTaskBundle,
++} from './index'
++
++function makeBundle(): ExternalTaskBundle {
++  return {
++    summary: {
++      taskId: 'tw-100',
++      title: 'Stabilize Teambition sync',
++      kind: 'feature',
++      projectId: 'tw-project-1',
++      updatedAt: '2026-07-12T10:00:00.000Z',
++    },
++    comments: [
++      {
++        commentId: 'comment-1',
++        content: 'Keep this note verbatim.',
++        createdAt: '2026-07-12T10:05:00.000Z',
++      },
++    ],
++    progress: {
++      percent: 60,
++      updatedAt: '2026-07-12T10:06:00.000Z',
++      note: 'Halfway there.',
++    },
++    binding: {
++      projectId: 'tw-project-1',
++      scope: { type: 'project', projectId: 'tw-project-1' },
++    },
++    description: 'Preserve this description verbatim.',
++    attachments: [
++      { name: 'design.pdf', url: 'https://files.example.com/design.pdf' },
++      {
++        name: 'secret.txt',
++        url: 'mcp://teambition/task/tw-100?accessToken=top-secret',
++      },
++    ],
++    sourceMetadata: {
++      sourceSlug: 'teambition',
++      requestId: 'req-1',
++      sourceUrl: 'mcp://teambition/task/tw-100?userToken=shhh',
++    },
++    agentInstructions: [
++      'Follow the source task exactly.',
++      'Do not expose credentials.',
++    ],
++  } as ExternalTaskBundle
++}
++
++describe('Teambition storage', () => {
++  const roots: string[] = []
++
++  afterEach(() => {
++    for (const root of roots.splice(0)) {
++      rmSync(root, { recursive: true, force: true })
++    }
++  })
++
++  it('claims a task idempotently and persists redacted task snapshots plus sync logs', async () => {
++    const root = mkdtempSync(join(tmpdir(), 'teambition-storage-'))
++    roots.push(root)
++
++    const first = await claimBinding(root, {
++      provider: 'teambition',
++      taskId: 'tw-100',
++      sessionId: 'session-1',
++      sourceSlug: 'teambition',
++      state: 'claimed',
++      claimedAt: '2026-07-12T10:00:00.000Z',
++    })
++    const second = await claimBinding(root, {
++      ...first,
++      sessionId: 'session-2',
++    })
++
++    expect(second.sessionId).toBe('session-1')
++    expect(await findBindingByTaskId(root, 'tw-100')).toEqual(first)
++
++    const bindings = await loadBindings(root)
++    expect(bindings).toHaveLength(1)
++
++    const bundle = makeBundle()
++    await writeTaskBundle(root, first.sessionId, bundle)
++    await appendSyncLog(root, {
++      operation: 'task.pull',
++      taskId: 'tw-100',
++      sessionId: first.sessionId,
++      timestamp: '2026-07-12T10:07:00.000Z',
++      result: 'ok',
++      requestId: 'req-1',
++      error: 'authorization=Bearer secret-value',
++    })
++
++    const dataDir = join(root, 'sessions', 'session-1', 'data', 'teambition')
++    const taskJson = readFileSync(join(dataDir, 'task.json'), 'utf-8')
++    const taskMarkdown = readFileSync(join(dataDir, 'task.md'), 'utf-8')
++    const syncLog = readFileSync(join(dataDir, 'sync-log.jsonl'), 'utf-8')
++    const parsedJson = JSON.parse(taskJson) as Record<string, unknown>
++
++    expect(parsedJson.summary).toMatchObject({
++      taskId: 'tw-100',
++      title: 'Stabilize Teambition sync',
++    })
++    expect(taskJson).toContain('Preserve this description verbatim.')
++    expect(taskJson).toContain('Keep this note verbatim.')
++    expect(taskJson).not.toContain('top-secret')
++    expect(taskJson).not.toContain('shhh')
++    expect(taskJson).not.toContain('mcp://teambition/task/tw-100?accessToken=top-secret')
++
++    expect(taskMarkdown).toContain('# Stabilize Teambition sync')
++    expect(taskMarkdown).toContain('## Description')
++    expect(taskMarkdown).toContain('Preserve this description verbatim.')
++    expect(taskMarkdown).toContain('## Log/进展')
++    expect(taskMarkdown).toContain('Keep this note verbatim.')
++    expect(taskMarkdown).toContain('## Attachments')
++    expect(taskMarkdown).toContain('design.pdf')
++    expect(taskMarkdown).toContain('## Source metadata')
++    expect(taskMarkdown).toContain('## Agent instructions')
++    expect(taskMarkdown).not.toContain('top-secret')
++    expect(taskMarkdown).not.toContain('shhh')
++    expect(taskMarkdown).not.toContain('mcp://teambition/task/tw-100?accessToken=top-secret')
++
++    const [entry] = syncLog.trim().split('\n')
++    expect(entry).toBeDefined()
++    expect(entry!).toContain('"operation":"task.pull"')
++    expect(entry!).toContain('"requestId":"req-1"')
++    expect(entry!).not.toContain('secret-value')
++    expect(entry!).not.toContain('authorization')
++  })
++})
+diff --git a/packages/teambition-integration/src/task-bundle.ts b/packages/teambition-integration/src/task-bundle.ts
+new file mode 100644
+index 00000000..84da6367
+--- /dev/null
++++ b/packages/teambition-integration/src/task-bundle.ts
+@@ -0,0 +1,171 @@
++import { appendFile, mkdir, rename, writeFile } from 'node:fs/promises'
++import { join } from 'node:path'
++import type { ExternalTaskBundle } from './domain'
++
++type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue }
++
++export interface SyncLogEntry {
++  operation: string
++  taskId: string
++  sessionId: string
++  timestamp: string
++  result: string
++  requestId?: string
++  error?: string
++}
++
++type LooseBundle = ExternalTaskBundle & Record<string, unknown>
++
++const REDACTED = '[REDACTED]'
++const REDACTED_MCP_URL = '[REDACTED_MCP_URL]'
++const SECRET_PATTERNS = [/userToken/i, /authorization/i, /appSecret/i, /accessToken/i]
++
++function dataDir(workspaceRoot: string, sessionId: string): string {
++  return join(workspaceRoot, 'sessions', sessionId, 'data', 'teambition')
++}
++
++function toJsonValue(value: unknown): JsonValue {
++  if (
++    value === null ||
++    typeof value === 'string' ||
++    typeof value === 'number' ||
++    typeof value === 'boolean'
++  ) {
++    return sanitizeString(value)
++  }
++
++  if (Array.isArray(value)) {
++    return value.map((item) => toJsonValue(item))
++  }
++
++  if (typeof value === 'object' && value) {
++    return Object.fromEntries(
++      Object.entries(value).map(([key, entry]) => [key, toJsonValue(entry)]),
++    )
++  }
++
++  return String(value)
++}
++
++function sanitizeString(value: unknown): JsonValue {
++  if (typeof value !== 'string') {
++    return value as Exclude<JsonValue, string>
++  }
++
++  if (value.startsWith('mcp://')) {
++    return REDACTED_MCP_URL
++  }
++
++  return SECRET_PATTERNS.some((pattern) => pattern.test(value)) ? REDACTED : value
++}
++
++function getOptionalArray(bundle: LooseBundle, key: string): unknown[] {
++  const value = bundle[key]
++  return Array.isArray(value) ? value : []
++}
++
++function getOptionalText(bundle: LooseBundle, key: string): string | undefined {
++  const value = bundle[key]
++  return typeof value === 'string' && value.trim() ? value : undefined
++}
++
++function getOptionalRecord(bundle: LooseBundle, key: string): Record<string, unknown> | undefined {
++  const value = bundle[key]
++  return typeof value === 'object' && value !== null && !Array.isArray(value)
++    ? (value as Record<string, unknown>)
++    : undefined
++}
++
++function renderList(items: string[]): string {
++  return items.length > 0 ? items.map((item) => `- ${item}`).join('\n') : '- None'
++}
++
++function renderKeyValues(record: Record<string, unknown> | undefined): string {
++  if (!record) return '- None'
++  const lines = Object.entries(record).map(([key, value]) => `- ${key}: ${String(toJsonValue(value))}`)
++  return lines.length > 0 ? lines.join('\n') : '- None'
++}
++
++function renderComments(bundle: ExternalTaskBundle): string {
++  const commentLines = bundle.comments.map(
++    (comment) => `- ${comment.createdAt} ${comment.content}`,
++  )
++  if (bundle.progress) {
++    commentLines.push(
++      `- ${bundle.progress.updatedAt} ${bundle.progress.percent}%${bundle.progress.note ? ` — ${bundle.progress.note}` : ''}`,
++    )
++  }
++  return commentLines.length > 0 ? commentLines.join('\n') : '- None'
++}
++
++function renderAttachments(bundle: LooseBundle): string {
++  const attachments = getOptionalArray(bundle, 'attachments').map((item) =>
++    typeof item === 'object' && item
++      ? Object.values(item as Record<string, unknown>)
++          .map((value) => String(toJsonValue(value)))
++          .join(' ')
++          .trim()
++      : String(toJsonValue(item)),
++  )
++  return renderList(attachments.filter(Boolean))
++}
++
++function renderAgentInstructions(bundle: LooseBundle): string {
++  const instructions = getOptionalArray(bundle, 'agentInstructions').map((item) => String(toJsonValue(item)))
++  return renderList(instructions.filter(Boolean))
++}
++
++function buildMarkdown(bundle: LooseBundle): string {
++  const description = getOptionalText(bundle, 'description') ?? '- None'
++  const sourceMetadata = getOptionalRecord(bundle, 'sourceMetadata')
++
++  return [
++    `# ${bundle.summary.title}`,
++    '',
++    '## Description',
++    description,
++    '',
++    '## Log/进展',
++    renderComments(bundle),
++    '',
++    '## Attachments',
++    renderAttachments(bundle),
++    '',
++    '## Source metadata',
++    renderKeyValues(sourceMetadata),
++    '',
++    '## Agent instructions',
++    renderAgentInstructions(bundle),
++    '',
++  ]
++    .map((line) => String(toJsonValue(line)))
++    .join('\n')
++}
++
++async function writeAtomic(filePath: string, content: string): Promise<void> {
++  const tempPath = `${filePath}.tmp`
++  await writeFile(tempPath, content, 'utf-8')
++  await rename(tempPath, filePath)
++}
++
++export async function writeTaskBundle(
++  workspaceRoot: string,
++  sessionId: string,
++  bundle: ExternalTaskBundle,
++): Promise<void> {
++  const dir = dataDir(workspaceRoot, sessionId)
++  await mkdir(dir, { recursive: true })
++
++  const looseBundle = bundle as LooseBundle
++  const sanitizedBundle = toJsonValue(looseBundle)
++
++  await writeAtomic(join(dir, 'task.json'), JSON.stringify(sanitizedBundle, null, 2))
++  await writeAtomic(join(dir, 'task.md'), buildMarkdown(looseBundle))
++}
++
++export async function appendSyncLog(workspaceRoot: string, entry: SyncLogEntry): Promise<void> {
++  const dir = dataDir(workspaceRoot, entry.sessionId)
++  await mkdir(dir, { recursive: true })
++  const sanitizedEntry = toJsonValue(entry)
++  await appendFile(join(dir, 'sync-log.jsonl'), `${JSON.stringify(sanitizedEntry)}\n`, 'utf-8')
++}

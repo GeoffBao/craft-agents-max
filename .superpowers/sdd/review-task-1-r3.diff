@@ -1,0 +1,349 @@
+# Review package: de1de0e2..8144c561f9cbe45e924b10c3c09b8371383bacd1
+
+## Commits
+8144c561 test: cover Teambition parser edge cases
+e6cd79f3 test: expand Teambition domain coverage
+0082885a feat: add Teambition integration domain contract
+
+## Files changed
+ packages/teambition-integration/package.json       |  18 ++++
+ packages/teambition-integration/src/domain.test.ts | 101 +++++++++++++++++++
+ packages/teambition-integration/src/domain.ts      | 112 +++++++++++++++++++++
+ packages/teambition-integration/src/gateway.ts     |  35 +++++++
+ packages/teambition-integration/src/index.ts       |   2 +
+ packages/teambition-integration/tsconfig.json      |  28 ++++++
+ 6 files changed, 296 insertions(+)
+
+## Diff
+diff --git a/packages/teambition-integration/package.json b/packages/teambition-integration/package.json
+new file mode 100644
+index 00000000..0d7719f2
+--- /dev/null
++++ b/packages/teambition-integration/package.json
+@@ -0,0 +1,18 @@
++{
++  "name": "@craft-agent/teambition-integration",
++  "version": "0.11.1",
++  "license": "Apache-2.0",
++  "description": "Teambition domain types, parser, and gateway contract for Craft Agents",
++  "type": "module",
++  "main": "src/index.ts",
++  "types": "src/index.ts",
++  "exports": {
++    ".": "./src/index.ts",
++    "./domain": "./src/domain.ts",
++    "./gateway": "./src/gateway.ts"
++  },
++  "scripts": {
++    "test": "bun test",
++    "typecheck": "tsc --noEmit"
++  }
++}
+diff --git a/packages/teambition-integration/src/domain.test.ts b/packages/teambition-integration/src/domain.test.ts
+new file mode 100644
+index 00000000..0612d057
+--- /dev/null
++++ b/packages/teambition-integration/src/domain.test.ts
+@@ -0,0 +1,101 @@
++import { describe, expect, it } from 'bun:test'
++import { parseExternalTaskSummary, type ExecutionScope, type ExternalTaskSummary } from './domain'
++
++describe('Teambition domain', () => {
++  it('represents the workspace execution scope', () => {
++    const scope: ExecutionScope = { type: 'workspace' }
++    expect(scope).toEqual({ type: 'workspace' })
++  })
++
++  it('represents the project execution scope', () => {
++    const scope: ExecutionScope = { type: 'project', projectId: 'tw-project-1' }
++    expect(scope).toEqual({ type: 'project', projectId: 'tw-project-1' })
++  })
++
++  it('accepts a valid feature task with a project binding', () => {
++    const input: ExternalTaskSummary = {
++      taskId: 'tw-100',
++      title: 'Fix login timeout',
++      kind: 'feature',
++      projectId: 'tw-project-1',
++      updatedAt: '2026-07-12T10:00:00.000Z',
++    }
++    expect(parseExternalTaskSummary(input)).toEqual(input)
++  })
++
++  it('accepts a valid bug task with a project binding', () => {
++    const input: ExternalTaskSummary = {
++      taskId: 'tw-100-bug',
++      title: 'Fix login timeout',
++      kind: 'bug',
++      projectId: 'tw-project-1',
++      updatedAt: '2026-07-12T10:00:00.000Z',
++    }
++    expect(parseExternalTaskSummary(input)).toEqual(input)
++  })
++
++  it('accepts a valid generic task without a project binding', () => {
++    const input: ExternalTaskSummary = {
++      taskId: 'tw-101',
++      title: 'General follow-up',
++      kind: 'task',
++      updatedAt: '2026-07-12T10:00:00.000Z',
++    }
++    expect(parseExternalTaskSummary(input)).toEqual(input)
++  })
++
++  it('accepts a valid generic task with a project binding', () => {
++    const input: ExternalTaskSummary = {
++      taskId: 'tw-102',
++      title: 'General follow-up',
++      kind: 'task',
++      projectId: 'tw-project-1',
++      updatedAt: '2026-07-12T10:00:00.000Z',
++    }
++    expect(parseExternalTaskSummary(input)).toEqual(input)
++  })
++
++  it('rejects a project task without a project binding', () => {
++    expect(() =>
++      parseExternalTaskSummary({
++        taskId: 'tw-101',
++        title: 'Add export',
++        kind: 'feature',
++        updatedAt: '2026-07-12T10:00:00.000Z',
++      }),
++    ).toThrow()
++  })
++
++  it('rejects an empty taskId', () => {
++    expect(() =>
++      parseExternalTaskSummary({
++        taskId: '   ',
++        title: 'Add export',
++        kind: 'task',
++        updatedAt: '2026-07-12T10:00:00.000Z',
++      }),
++    ).toThrow()
++  })
++
++  it('rejects an empty title', () => {
++    expect(() =>
++      parseExternalTaskSummary({
++        taskId: 'tw-103',
++        title: '   ',
++        kind: 'task',
++        updatedAt: '2026-07-12T10:00:00.000Z',
++      }),
++    ).toThrow()
++  })
++
++  it('rejects an empty updatedAt', () => {
++    expect(() =>
++      parseExternalTaskSummary({
++        taskId: 'tw-104',
++        title: 'Add export',
++        kind: 'task',
++        updatedAt: '   ',
++      }),
++    ).toThrow()
++  })
++})
+diff --git a/packages/teambition-integration/src/domain.ts b/packages/teambition-integration/src/domain.ts
+new file mode 100644
+index 00000000..b85bfb15
+--- /dev/null
++++ b/packages/teambition-integration/src/domain.ts
+@@ -0,0 +1,112 @@
++export type TeambitionTaskKind = 'feature' | 'bug' | 'task'
++
++export type ExecutionScope =
++  | { type: 'workspace' }
++  | { type: 'project'; projectId: string }
++
++export interface TeambitionBinding {
++  projectId: string
++  scope: ExecutionScope
++}
++
++export interface ExternalTaskSummary {
++  taskId: string
++  title: string
++  kind: TeambitionTaskKind
++  updatedAt: string
++  projectId?: string
++}
++
++export interface ExternalTaskComment {
++  commentId: string
++  content: string
++  createdAt: string
++}
++
++export interface ExternalTaskProgress {
++  percent: number
++  updatedAt: string
++  note?: string
++}
++
++export interface ExternalTaskBundle {
++  summary: ExternalTaskSummary
++  binding?: TeambitionBinding
++  comments: ExternalTaskComment[]
++  progress?: ExternalTaskProgress
++}
++
++export interface SyncResult {
++  taskId: string
++  syncedAt: string
++  changed: boolean
++  message?: string
++}
++
++export interface TeambitionUser {
++  userId: string
++  displayName: string
++  email?: string
++}
++
++export interface ListMyTasksInput {
++  scope?: ExecutionScope
++  cursor?: string
++  limit?: number
++}
++
++export interface ProgressInput {
++  percent: number
++  note?: string
++}
++
++export interface WorkflowStatusInput {
++  status: 'open' | 'in_progress' | 'done' | 'blocked'
++  note?: string
++}
++
++export interface WorktimeInput {
++  minutes: number
++  startedAt?: string
++  endedAt?: string
++  note?: string
++}
++
++function requireText(value: string, fieldName: string): string {
++  const trimmed = value.trim()
++  if (!trimmed) {
++    throw new Error(`Teambition external task summary requires a non-empty ${fieldName}`)
++  }
++  return trimmed
++}
++
++function requireProjectId(summary: ExternalTaskSummary): string {
++  const projectId = summary.projectId?.trim()
++  if (!projectId) {
++    throw new Error(`Teambition ${summary.kind} tasks require a projectId`)
++  }
++  return projectId
++}
++
++export function parseExternalTaskSummary(summary: ExternalTaskSummary): ExternalTaskSummary {
++  const taskId = requireText(summary.taskId, 'taskId')
++  const title = requireText(summary.title, 'title')
++  const updatedAt = requireText(summary.updatedAt, 'updatedAt')
++
++  if (summary.kind !== 'feature' && summary.kind !== 'bug' && summary.kind !== 'task') {
++    throw new Error(`Unsupported Teambition task kind: ${summary.kind satisfies never}`)
++  }
++
++  const projectId =
++    summary.kind === 'task'
++      ? summary.projectId?.trim() || undefined
++      : requireProjectId(summary)
++
++  return {
++    taskId,
++    title,
++    kind: summary.kind,
++    updatedAt,
++    ...(projectId ? { projectId } : {}),
++  }
++}
+diff --git a/packages/teambition-integration/src/gateway.ts b/packages/teambition-integration/src/gateway.ts
+new file mode 100644
+index 00000000..37b1dd0b
+--- /dev/null
++++ b/packages/teambition-integration/src/gateway.ts
+@@ -0,0 +1,35 @@
++import type {
++  ExternalTaskBundle,
++  ExternalTaskSummary,
++  ListMyTasksInput,
++  ProgressInput,
++  SyncResult,
++  TeambitionUser,
++  WorktimeInput,
++  WorkflowStatusInput,
++} from './domain'
++
++export type TeambitionCapability =
++  | 'identity'
++  | 'task.list'
++  | 'task.detail'
++  | 'task.progress.read'
++  | 'task.progress.write'
++  | 'task.status.write'
++  | 'task.comment.write'
++  | 'worktime.read'
++  | 'worktime.write'
++
++export interface TeambitionGatewayCapabilities {
++  readonly capabilities: readonly TeambitionCapability[]
++}
++
++export interface TeambitionGateway extends TeambitionGatewayCapabilities {
++  getCurrentUser(): Promise<TeambitionUser>
++  listMyTasks(input: ListMyTasksInput): Promise<ExternalTaskSummary[]>
++  getTaskBundle(taskId: string): Promise<ExternalTaskBundle>
++  addProgress(taskId: string, input: ProgressInput): Promise<SyncResult>
++  updateWorkflowStatus(taskId: string, input: WorkflowStatusInput): Promise<SyncResult>
++  addComment(taskId: string, content: string): Promise<SyncResult>
++  recordWorktime?: (taskId: string, input: WorktimeInput) => Promise<SyncResult>
++}
+diff --git a/packages/teambition-integration/src/index.ts b/packages/teambition-integration/src/index.ts
+new file mode 100644
+index 00000000..cda5464c
+--- /dev/null
++++ b/packages/teambition-integration/src/index.ts
+@@ -0,0 +1,2 @@
++export * from './domain'
++export * from './gateway'
+diff --git a/packages/teambition-integration/tsconfig.json b/packages/teambition-integration/tsconfig.json
+new file mode 100644
+index 00000000..9b3b0c07
+--- /dev/null
++++ b/packages/teambition-integration/tsconfig.json
+@@ -0,0 +1,28 @@
++{
++  "compilerOptions": {
++    "lib": ["ESNext"],
++    "target": "ESNext",
++    "module": "ESNext",
++    "moduleDetection": "force",
++    "jsx": "react-jsx",
++    "jsxImportSource": "react",
++    "allowJs": true,
++    "esModuleInterop": true,
++    "resolveJsonModule": true,
++    "moduleResolution": "bundler",
++    "allowImportingTsExtensions": true,
++    "verbatimModuleSyntax": true,
++    "noEmit": true,
++    "strict": true,
++    "skipLibCheck": true,
++    "types": ["bun"],
++    "noFallthroughCasesInSwitch": true,
++    "noUncheckedIndexedAccess": true,
++    "noUnusedLocals": false,
++    "noUnusedParameters": false,
++    "noPropertyAccessFromIndexSignature": false,
++    "baseUrl": "."
++  },
++  "include": ["src/**/*"],
++  "exclude": ["node_modules", "dist"]
++}

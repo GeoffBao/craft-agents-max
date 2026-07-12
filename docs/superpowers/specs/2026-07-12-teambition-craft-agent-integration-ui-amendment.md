@@ -53,6 +53,11 @@ Feature / Bug
 
 Kanban 列代表 Craft Agent 的本地执行状态；Teambition 工作流状态单独显示和同步。拖动 Kanban 卡片默认只改变本地状态，不能隐式修改 Teambition。
 
+> **实现澄清（2026-07-12 Task 3 前置调研补充，不改变以上已批准规则）**：本次调研未能在线访问到官方“Projects & Kanban Task
+> Board (Beta)”专属文档（链接当前渲染为通用学习地图页面），因此上述看板列/工作流映射仍符合原设计意图，
+> 但字段名称细节（参见设计文档第 8 节 `sfcId`/`tfsId`/`stageId`）尚未在线逐字复核，实现时必须以
+> Task 3 阶段 0 实际探测到的字段为准。详见 `.superpowers/sdd/task-3-research-memo.md`。
+
 ## 4. 领取界面
 
 领取时按任务类型展示执行范围：

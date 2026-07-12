@@ -1,0 +1,308 @@
+id: teambition-integration-continue
+title: Teambition MCP Gateway + RPC + UI + E2E
+goal: "Complete the remaining Teambition integration (Tasks 3-7): MCP gateway, RPC handlers, Kanban UI integration, sync policy, and end-to-end verification."
+acceptance_criteria: |-
+  1. User MCP gateway probes tools at runtime and normalizes results into domain types.
+  2. RPC handlers expose list/claim/getBinding/capabilities operations to the renderer.
+  3. Kanban shows a task picker and TW task badges with sync actions.
+  4. Sync policy rejects stale updates, deduplicates operations, and redacts credentials.
+  5. E2E test runs offline against FakeGateway and passes all stages.
+  6. Only teambition-integration + RPC + UI + i18n files are in the feature diff; bun.lock and .cursor/ remain unstaged.
+nodes:
+  - id: research-api
+    title: Research Teambition API capabilities
+    prompt: |-
+      Investigate Teambition latest Projects and Kanban Task Board API capabilities.
+
+      1. Use browser_tool to navigate to https://open.teambition.com/docs/documents/66cd468fff36bd665cccf040
+         - Snapshot the page, intercept network requests for the document tree API.
+         - Extract endpoints, required params, and response schemas.
+         - Focus on: task creation/update, status transitions, progress/log writing, worktime operations.
+
+      2. Navigate to https://open.teambition.com/user-mcp
+         - Document MCP tool names, input schemas, and output schemas.
+         - Note differences between Open API endpoints and MCP tool capabilities.
+
+      3. Fetch specific API docs referenced in the design spec:
+         - https://open.teambition.com/docs/apis/6321c6d1912d20d3b5a49ec1 (tasks)
+         - https://open.teambition.com/docs/apis/6321c6d2912d20d3b5a4a7b8 (task types)
+         - https://open.teambition.com/docs/apis/63ee3ea3912d20d3b543f315 (workflow)
+         - https://open.teambition.com/docs/apis/64b0bc0f912d20d3b5178ce9 (progress)
+         - https://open.teambition.com/docs/apis/6321c6cf912d20d3b5a48f2c (worktime)
+         - https://open.teambition.com/docs/apis/640594b7b07df7002be69f92 (custom fields)
+
+      4. Document complete capability matrix: capability name, MCP tool name, Open API endpoint, required params, permission scope.
+
+      5. Write output to data/teambition-api-research.md with:
+         - Exact MCP tool names discovered
+         - Open API endpoints for each operation
+         - Status transition flow (4-step chain: task to taskType to workflow to updateStatus)
+         - Worktime/plan-time API details
+         - Any breaking changes or deprecations
+
+      Important: Teambition docs site is a SPA - use browser_tool snapshot and network inspection.
+
+      Working directory: /Users/admin/Workspace/ClaudeCode/craft-agents-max
+    depends_on: []
+
+  - id: mcp-gateway
+    title: Implement User MCP gateway with capability detection
+    prompt: |-
+      Implement the User MCP gateway with runtime capability probing in packages/teambition-integration.
+
+      Context:
+      - Existing committed files: domain.ts, gateway.ts, bindings.ts, task-bundle.ts, index.ts, domain.test.ts, storage.test.ts
+      - Gateway interface is in gateway.ts with TeambitionGateway and TeambitionCapability types.
+      - Research output available at: data/teambition-api-research.md (from research-api node)
+      - MCP transport: enterprise User MCP pattern, endpoint URL + userToken as query param, Streamable HTTP.
+
+      Create:
+      - packages/teambition-integration/src/mcp-gateway.ts
+      - packages/teambition-integration/src/mcp-gateway.test.ts
+
+      mcp-gateway.ts exports:
+      1. createUserMcpGateway(options: UserMcpGatewayOptions): Promise<TeambitionGateway>
+         - options: { endpoint: string, credentialProvider: () => Promise<string> }
+         - Construct full MCP URL in memory only (never persisted or logged).
+         - List tools, probe capabilities, return TeambitionGateway instance.
+         - If required tool missing, mark capability unavailable (don't throw).
+
+      2. probeCapabilities(client: McpClient): Promise<readonly TeambitionCapability[]>
+         - Normalize tool names case-insensitively.
+         - Map tool aliases to canonical capabilities.
+         - Return only confirmed capabilities.
+
+      3. All TeambitionGateway methods:
+         - getCurrentUser() via identity tool.
+         - listMyTasks(input) via task list tool, normalize to ExternalTaskSummary[].
+         - getTaskBundle(taskId) via task detail + progress + comments tools, return ExternalTaskBundle.
+         - addProgress(taskId, input) via progress write tool, return SyncResult.
+         - updateWorkflowStatus(taskId, input) via status update tool, return SyncResult.
+         - addComment(taskId, content) via comment tool, return SyncResult.
+         - recordWorktime - only defined if worktime.write capability probed.
+
+      4. Error handling:
+         - Connection failures return typed errors (not thrown strings).
+         - Missing capability returns error result, don't call unknown tools.
+         - Redact credential values from all error messages.
+
+      mcp-gateway.test.ts covers:
+      1. Fake MCP transport stubbing tool listing and responses.
+      2. Capability probing with various tool name aliases.
+      3. Full capability detection (all tools present).
+      4. Partial capability detection (some tools missing, recordWorktime undefined).
+      5. Normalization of task data into ExternalTaskSummary and ExternalTaskBundle.
+      6. Redaction of credential-like fields in results.
+      7. Error handling for connection failures and missing capabilities.
+
+      Do NOT:
+      - Modify domain.ts or gateway.ts (existing committed contract).
+      - Hardcode enterprise-specific MCP tool prefixes.
+      - Implement OpenAPI gateway (deferred to future phase).
+      - Import from @craft-agent/core or @craft-agent/shared (keep package standalone).
+
+      Run: bun test packages/teambition-integration/src/mcp-gateway.test.ts && cd packages/teambition-integration && bun run typecheck
+      Commit: git add packages/teambition-integration && git commit -m "feat: add Teambition User MCP gateway"
+    depends_on:
+      - research-api
+
+  - id: rpc-handlers
+    title: Expose Teambition operations through RPC
+    prompt: |-
+      Expose Teambition MCP gateway operations through the app RPC layer so the renderer can call them.
+
+      Context:
+      - RPC channels: packages/shared/src/protocol/channels.ts
+      - DTOs: packages/shared/src/protocol/dto.ts
+      - Server handlers: packages/server-core/src/handlers/rpc/
+      - Preload: apps/electron/src/preload/bootstrap.ts
+      - MCP gateway: packages/teambition-integration/src/mcp-gateway.ts
+      - Existing bindings/task-bundle: packages/teambition-integration/src/bindings.ts, task-bundle.ts
+      - SessionManager.createSession() in packages/server-core/src/sessions/
+
+      Modify:
+      - packages/shared/src/protocol/channels.ts - add teambition channel types
+      - packages/shared/src/protocol/dto.ts - add Teambition DTOs
+      - packages/server-core/src/handlers/rpc/index.ts - register teambition handler
+      - Create: packages/server-core/src/handlers/rpc/teambition.ts
+      - Create: packages/server-core/src/handlers/rpc/teambition.test.ts
+      - apps/electron/src/preload/bootstrap.ts - add teambition preload methods
+
+      RPC operations:
+      1. teambition:listMyTasks - returns ExternalTaskSummary[] + capabilities
+      2. teambition:claimTask - bundle task, create/reuse session, write snapshot, return sessionId
+      3. teambition:getBinding - given taskId, return existing binding or null
+      4. teambition:capabilities - return current probed capabilities list
+      5. teambition:syncProgress - given taskId + sessionId, write progress to Teambition
+      6. teambition:updateStatus - given taskId + target status, update workflow status
+      7. teambition:bindProject - given sessionId + projectId, update workspace-only task binding
+
+      Rules:
+      - Create TeambitionGateway lazily (first RPC call triggers probing).
+      - Cache gateway instance per workspace.
+      - claimTask: load bundle, check binding, validate scope, create session, write snapshot, claim binding.
+      - If session creation succeeds but binding write fails, return sessionId + recoverable error.
+      - All Teambition DTOs are Teambition-specific (no generic Session DTO changes).
+      - Missing credentials return typed re-authentication error, not generic 500.
+
+      Run: bun test packages/server-core/src/handlers/rpc/teambition.test.ts && cd packages/shared && bun run typecheck && cd packages/server-core && bun run typecheck && cd apps/electron && bun run typecheck
+      Commit: git add packages/shared/src/protocol packages/server-core/src/handlers/rpc apps/electron/src/preload/bootstrap.ts && git commit -m "feat: expose Teambition task claiming RPC"
+    depends_on:
+      - mcp-gateway
+
+  - id: sync-policy
+    title: Add sync policy with conflict detection
+    prompt: |-
+      Implement the sync policy layer that prevents stale updates, detects conflicts, and provides idempotent sync operations.
+
+      Context:
+      - Existing domain types: SyncResult, ProgressInput, WorkflowStatusInput in domain.ts
+      - Gateway: TeambitionGateway in gateway.ts
+      - Storage: bindings.ts (loadBindings, findBindingByTaskId), task-bundle.ts (appendSyncLog)
+      - Binding storage tracks lastPulledAt and lastPushedAt timestamps.
+
+      Create:
+      - packages/teambition-integration/src/sync-policy.ts
+      - packages/teambition-integration/src/sync-policy.test.ts
+
+      sync-policy.ts exports:
+      1. buildOperationFingerprint(taskId, operation, sessionId, payload): string
+         - Deterministic hash of { taskId, operation, sessionId, normalized payload }
+         - Used to detect duplicate sync operations.
+
+      2. checkSyncConflict(localSnapshotTimestamp, remoteUpdatedAt): object
+         - Returns { conflict: true } when remote is newer, { ok: true } otherwise.
+         - Never silently overwrite remote changes.
+
+      3. ProgressSyncPolicy.syncProgress(taskId, sessionId, gateway, summary, storage)
+         - Build progress body from session summary (conclusion, risks, next steps).
+         - Check fingerprint against sync-log.jsonl for dedup.
+         - Check conflict via remote updatedAt comparison.
+         - Call gateway.addProgress() only after conflict-check and dedup pass.
+         - Append sync-log.jsonl entry with fingerprint and result.
+         - Return SyncResult { taskId, syncedAt, changed, message }.
+
+      4. StatusSyncPolicy.syncStatus(taskId, sessionId, gateway, targetStatus, storage)
+         - Load project actual workflow status IDs.
+         - Map the UI-selected target to correct sfcId/tfsId/stageId.
+         - Only call gateway.updateWorkflowStatus() after explicit confirmation.
+         - Never translate Kanban column directly to remote status without mapping.
+
+      5. Credential redaction in all sync log entries (appendSyncLog handles at write time).
+
+      sync-policy.test.ts covers:
+      1. Conflict detection: remote newer than local returns conflict result.
+      2. No conflict: local newer than remote returns synced result.
+      3. Fingerprint dedup: same operation twice returns already_synced.
+      4. Progress sync happy path: valid call returns synced result + log entry.
+      5. Status sync happy path: valid mapping returns synced result.
+      6. Stale update rejected: conflict scenario returns conflict without calling write.
+
+      Integration:
+      After tests pass, modify packages/server-core/src/handlers/rpc/teambition.ts to use sync-policy.
+
+      Run: bun test packages/teambition-integration/src/sync-policy.test.ts && cd packages/teambition-integration && bun run typecheck
+      Commit: git add packages/teambition-integration && git commit -m "feat: add Teambition sync policy with conflict detection"
+    depends_on:
+      - mcp-gateway
+
+  - id: ui-integration
+    title: Add Teambition task picker and Kanban integration
+    prompt: |-
+      Add the Teambition task picker, external task badges, and explicit sync actions to the existing Projects/Kanban UI.
+
+      Context:
+      - Kanban UI: apps/electron/src/renderer/components/app-shell/kanban/
+      - Types: KanbanTask, KanbanBoardContainer, TaskTile, TaskEditor
+      - Projects UI: apps/electron/src/renderer/components/app-shell/projects/
+      - RPC handlers via window.electronAPI.teambition methods (preload layer from rpc-handlers node)
+      - Design spec: docs/superpowers/specs/2026-07-12-teambition-craft-agent-integration-ui-amendment.md
+
+      Create:
+      - apps/electron/src/renderer/components/app-shell/teambition/TeambitionTaskPicker.tsx
+      - apps/electron/src/renderer/components/app-shell/teambition/TeambitionTaskBadge.tsx
+      - apps/electron/src/renderer/components/app-shell/teambition/TeambitionTaskActions.tsx
+      - apps/electron/src/renderer/atoms/teambition.ts (Jotai atoms for binding state)
+
+      Modify:
+      - apps/electron/src/renderer/components/app-shell/kanban/types.ts - add optional teambition view field
+      - apps/electron/src/renderer/components/app-shell/kanban/KanbanBoardContainer.tsx - add picker button
+      - apps/electron/src/renderer/components/app-shell/kanban/TaskTile.tsx - render TW badge and actions
+      - apps/electron/src/renderer/components/app-shell/kanban/TaskEditor.tsx - show TW info panel
+      - packages/shared/src/i18n/locales/zh-Hans.json - add Teambition i18n keys
+      - packages/shared/src/i18n/locales/en.json - add Teambition i18n keys
+
+      TeambitionTaskPicker:
+      - Button "从 TW 领取我的任务" opens modal.
+      - Lists tasks from teambition:listMyTasks RPC with type, title, project, updated time.
+      - Feature/Bug requires Craft Project selection, cannot claim without one.
+      - Generic Task offers "仅创建 Agent 对话" (workspace) and "绑定到 Craft Project" (project).
+      - Already-bound tasks show existing binding state (open instead of claim).
+      - Hide worktime if capability says unavailable.
+
+      TeambitionTaskBadge:
+      - Compact badge on TaskTile: TW icon, task kind, sync state indicator.
+      - Sync states: synced, pending, conflict, failed.
+      - Tooltip shows taskId, project name, last sync time.
+
+      TeambitionTaskActions:
+      - View TW task (opens in browser).
+      - Refresh task snapshot.
+      - Sync Agent progress (calls teambition:syncProgress).
+      - Update TW status (dropdown of workflow states, confirmation before submit).
+      - Register worktime (only when worktime.write capability confirmed).
+      - Bind/unbind Craft Project for workspace-only tasks.
+
+      Kanban semantics:
+      - Drag move = local Craft state only, never triggers TW write.
+      - Feature/Bug only shown in project Kanban.
+      - Generic Task (workspace) shown in All Tasks.
+      - No second Teambition board - reuse existing Projects/Kanban.
+
+      Run: bun test apps/electron/src/renderer/components/app-shell/teambition/TeambitionTaskPicker.test.tsx
+      Commit: git add apps/electron/src/renderer packages/shared/src/i18n && git commit -m "feat: show Teambition tasks in Projects Kanban"
+    depends_on:
+      - rpc-handlers
+
+  - id: e2e-verify
+    title: End-to-end verification with upstream safety check
+    prompt: |-
+      Run a complete end-to-end test against the fake gateway and verify the branch boundary is clean.
+
+      Context:
+      - Integration code in packages/teambition-integration/
+      - RPC handlers in packages/server-core/src/handlers/rpc/teambition.ts
+      - UI in apps/electron/src/renderer/
+      - Fake TeambitionGateway constructible from test fixtures.
+      - Branch: 260705-agent, ahead of origin.
+
+      Create:
+      - packages/teambition-integration/src/fixtures/redacted-task-bundle.json
+      - packages/teambition-integration/src/fixtures/redacted-tool-list.json
+      - packages/teambition-integration/src/e2e.test.ts
+
+      Fixtures:
+      - Use task ID tw-fixture-100, project ID tw-project-1, session ID session-fixture-1.
+      - No real URL, Token, AppSecret, or personal data.
+      - Tool list fixture: full set of probed MCP tool names.
+
+      e2e.test.ts sequence:
+      1. Create FakeTeambitionGateway with known capabilities.
+      2. List my tasks, verify task summaries returned with correct fields.
+      3. Claim a Bug into craft-project-1, verify session created and binding written.
+      4. Claim the same Bug again, verify same sessionId returned (idempotent).
+      5. Verify only one binding exists in bindings.json.
+      6. Verify task.json, task.md, and sync-log.jsonl created under sessions/session-fixture-1/data/teambition/.
+      7. Sync progress via sync-policy, verify SyncResult with synced=true.
+      8. Attempt stale update (remote task newer), verify conflict returned.
+      9. Verify sync-log.jsonl has redacted entries (no URLs, no tokens).
+      10. Run git status and git diff --name-only main...HEAD.
+      11. Verify only teambition-integration, RPC, UI, and i18n files appear.
+      12. Verify bun.lock and .cursor/ are NOT staged.
+      13. Verify no changes to packages/core/ or packages/shared/ (outside protocol + i18n).
+
+      Run: bun test packages/teambition-integration/src/e2e.test.ts && git diff --name-only main...HEAD && git status --short --branch
+      Commit: git add packages/teambition-integration/src/fixtures packages/teambition-integration/src/e2e.test.ts && git commit -m "test: verify Teambition task handoff flow"
+    depends_on:
+      - sync-policy
+      - ui-integration

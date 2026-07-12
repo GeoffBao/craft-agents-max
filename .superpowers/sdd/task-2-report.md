@@ -210,3 +210,78 @@ Output:
 ```text
 $ tsc --noEmit
 ```
+
+Task 2 review fix: inline URL redaction inside arbitrary prose
+
+Scope:
+- Fixed the remaining snapshot leak where embedded `http://` and `https://` URLs inside freeform strings were preserved in `task.json` and `task.md`.
+- Preserved surrounding prose while replacing only the URL span with `[redacted-url]`.
+- Touched only:
+  - `packages/teambition-integration/src/task-bundle.ts`
+  - `packages/teambition-integration/src/storage.test.ts`
+  - this report
+
+Red test, before the fix
+
+Command:
+```bash
+bun test /Users/admin/Workspace/ClaudeCode/craft-agents-max/packages/teambition-integration/src/storage.test.ts
+```
+
+Output:
+```text
+bun test v1.3.11 (af24e281)
+
+packages/teambition-integration/src/storage.test.ts:
+109 |
+110 |     expect(parsedJson.summary).toMatchObject({
+111 |       taskId: 'tw-100',
+112 |       title: 'Stabilize Teambition sync',
+113 |     })
+114 |     expect(taskJson).toContain('Preserve this description verbatim and see [redacted-url] for context.')
+                           ^
+error: expect(received).toContain(expected)
+
+Expected to contain: "Preserve this description verbatim and see [redacted-url] for context."
+Received: "{\n  \"summary\": {\n    \"taskId\": \"tw-100\",\n    \"title\": \"Stabilize Teambition sync\",\n    \"kind\": \"feature\",\n    \"projectId\": \"tw-project-1\",\n    \"updatedAt\": \"2026-07-12T10:00:00.000Z\"\n  },\n  \"comments\": [\n    {\n      \"commentId\": \"comment-1\",\n      \"content\": \"Keep this note verbatim and review https://docs.example.com/runbook?foo=bar today.\",\n      \"createdAt\": \"2026-07-12T10:05:00.000Z\"\n    }\n  ],\n  \"progress\": {\n    \"percent\": 60,\n    \"updatedAt\": \"2026-07-12T10:06:00.000Z\",\n    \"note\": \"Halfway there.\"\n  },\n  \"binding\": {\n    \"projectId\": \"tw-project-1\",\n    \"scope\": {\n      \"type\": \"project\",\n      \"projectId\": \"tw-project-1\"\n    }\n  },\n  \"description\": \"Preserve this description verbatim and see https://example.com/spec?token=abc for context.\",\n  \"attachments\": [\n    {\n      \"name\": \"design.pdf\",\n      \"url\": \"[redacted-url]\"\n    },\n    {\n      \"name\": \"secret.txt\",\n      \"url\": \"[REDACTED_MCP_URL]\"\n    }\n  ],\n  \"sourceMetadata\": {\n    \"sourceSlug\": \"teambition\",\n    \"requestId\": \"req-1\",\n    \"sourceUrl\": \"[REDACTED_MCP_URL]\",\n    \"note\": \"Originated from https://teambition.example.com/tasks/tw-100 and was mirrored locally.\"\n  },\n  \"agentInstructions\": [\n    \"Follow the source task exactly.\",\n    \"Do not expose credentials.\"\n  ]\n}"
+
+      at <anonymous> (/Users/admin/Workspace/ClaudeCode/craft-agents-max/packages/teambition-integration/src/storage.test.ts:114:22)
+(fail) Teambition storage > claims a task idempotently and persists redacted task snapshots plus sync logs [4.75ms]
+
+ 0 pass
+ 1 fail
+ 5 expect() calls
+Ran 1 test across 1 file. [17.00ms]
+```
+
+Green test, after the fix
+
+Command:
+```bash
+bun test /Users/admin/Workspace/ClaudeCode/craft-agents-max/packages/teambition-integration/src/storage.test.ts
+```
+
+Output:
+```text
+bun test v1.3.11 (af24e281)
+
+packages/teambition-integration/src/storage.test.ts:
+(pass) Teambition storage > claims a task idempotently and persists redacted task snapshots plus sync logs [3.57ms]
+
+ 1 pass
+ 0 fail
+ 38 expect() calls
+Ran 1 test across 1 file. [12.00ms]
+```
+
+Package typecheck, after the inline URL fix
+
+Command:
+```bash
+bun run --cwd /Users/admin/Workspace/ClaudeCode/craft-agents-max/packages/teambition-integration typecheck
+```
+
+Output:
+```text
+$ tsc --noEmit
+```

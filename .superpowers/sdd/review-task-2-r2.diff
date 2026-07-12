@@ -1,0 +1,645 @@
+# Review package: 8144c561..f79aacf58dfe3086c59bfacd72b6378fc67d0086
+
+## Commits
+f79aacf5 fix: redact Teambition snapshot urls
+5c67f890 feat: persist Teambition bindings and snapshots
+
+## Files changed
+ .superpowers/sdd/task-2-report.md                  | 212 +++++++++++++++++++++
+ packages/teambition-integration/src/bindings.ts    |  65 +++++++
+ packages/teambition-integration/src/index.ts       |   2 +
+ .../teambition-integration/src/storage.test.ts     | 144 ++++++++++++++
+ packages/teambition-integration/src/task-bundle.ts | 176 +++++++++++++++++
+ 5 files changed, 599 insertions(+)
+
+## Diff
+diff --git a/.superpowers/sdd/task-2-report.md b/.superpowers/sdd/task-2-report.md
+new file mode 100644
+index 00000000..4d0cf24f
+--- /dev/null
++++ b/.superpowers/sdd/task-2-report.md
+@@ -0,0 +1,212 @@
++Status: complete
++
++Commit:
++- `5c67f89004b874590cf0a85c67fe6385918806dc`
++- Subject: `feat: persist Teambition bindings and snapshots`
++
++Changed files:
++- `packages/teambition-integration/src/bindings.ts`
++- `packages/teambition-integration/src/task-bundle.ts`
++- `packages/teambition-integration/src/storage.test.ts`
++- `packages/teambition-integration/src/index.ts`
++
++Scope notes:
++- Preserved existing unrelated worktree changes in `bun.lock`, `.cursor/`, and `.superpowers/`.
++- Touched only the Task 2 package files plus this required report.
++
++TDD status:
++- Red first: added `packages/teambition-integration/src/storage.test.ts` before implementation.
++- Verified red with the required focused test.
++- Implemented minimal storage/export code to satisfy the test.
++- Re-ran focused verification and package typecheck after implementation and again after commit.
++
++Implementation summary:
++- Added atomic Teambition binding storage at `{workspaceRoot}/integrations/teambition/bindings.json`.
++- Implemented idempotent `claimBinding()` that returns the existing binding for duplicate `taskId`.
++- Implemented `loadBindings()` and `findBindingByTaskId()`.
++- Implemented task bundle snapshot writing under `sessions/<sessionId>/data/teambition/`:
++  - `task.json`
++  - `task.md`
++- Implemented append-only `sync-log.jsonl` writing with value redaction for `userToken`, `authorization`, `appSecret`, and `accessToken`.
++- Redacted all `mcp://` URLs from JSON and Markdown snapshots.
++- Exported the new storage surface from `packages/teambition-integration/src/index.ts`.
++
++Exact verification commands and output:
++
++1. Red test, before implementation
++
++Command:
++```bash
++bun test /Users/admin/Workspace/ClaudeCode/craft-agents-max/packages/teambition-integration/src/storage.test.ts
++```
++
++Output:
++```text
++bun test v1.3.11 (af24e281)
++
++packages/teambition-integration/src/storage.test.ts:
++
++# Unhandled error between tests
++-------------------------------
++1 | })
++2 | {
++    ^
++SyntaxError: Export named 'writeTaskBundle' not found in module '/Users/admin/Workspace/ClaudeCode/craft-agents-max/packages/teambition-integration/src/index.ts'.
++      at loadAndEvaluateModule (2:1)
++-------------------------------
++
++
++ 0 pass
++ 1 fail
++ 1 error
++Ran 1 test across 1 file. [77.00ms]
++```
++
++2. Focused test, after implementation
++
++Command:
++```bash
++bun test /Users/admin/Workspace/ClaudeCode/craft-agents-max/packages/teambition-integration/src/storage.test.ts
++```
++
++Output:
++```text
++bun test v1.3.11 (af24e281)
++
++packages/teambition-integration/src/storage.test.ts:
++(pass) Teambition storage > claims a task idempotently and persists redacted task snapshots plus sync logs [12.46ms]
++
++ 1 pass
++ 0 fail
++ 26 expect() calls
++Ran 1 test across 1 file. [28.00ms]
++```
++
++3. Package typecheck, after implementation
++
++Command:
++```bash
++bun run --cwd /Users/admin/Workspace/ClaudeCode/craft-agents-max/packages/teambition-integration typecheck
++```
++
++Output:
++```text
++$ tsc --noEmit
++```
++
++4. Fresh post-commit focused verification
++
++Command:
++```bash
++bun test /Users/admin/Workspace/ClaudeCode/craft-agents-max/packages/teambition-integration/src/storage.test.ts
++```
++
++Output:
++```text
++bun test v1.3.11 (af24e281)
++
++packages/teambition-integration/src/storage.test.ts:
++(pass) Teambition storage > claims a task idempotently and persists redacted task snapshots plus sync logs [11.45ms]
++
++ 1 pass
++ 0 fail
++ 26 expect() calls
++Ran 1 test across 1 file. [89.00ms]
++```
++
++5. Fresh post-commit package typecheck
++
++Command:
++```bash
++bun run --cwd /Users/admin/Workspace/ClaudeCode/craft-agents-max/packages/teambition-integration typecheck
++```
++
++Output:
++```text
++$ tsc --noEmit
++```
++
++Git status after commit:
++```text
++ M bun.lock
++?? .cursor/
++?? .superpowers/
++```
++
++Concerns:
++- `ExternalTaskBundle` from Task 1 is still intentionally sparse, so the snapshot writer accepts the Task 1 type as its base contract and reads richer optional fields defensively at runtime. That keeps Task 1 untouched, but if Task 3+ wants compile-time guarantees for `description`, `attachments`, `sourceMetadata`, or `agentInstructions`, those fields should be formalized in the domain contract later.
++
++Task 2 review fix: HTTPS URL redaction
++
++Scope:
++- Fixed the snapshot leak where ordinary `http://` and `https://` URLs were preserved in `task.json` and `task.md`.
++- Kept attachment filenames and non-URL text intact.
++- Touched only:
++  - `packages/teambition-integration/src/storage.test.ts`
++  - `packages/teambition-integration/src/task-bundle.ts`
++  - this report
++
++Red test, before the fix
++
++Command:
++```bash
++bun test /Users/admin/Workspace/ClaudeCode/craft-agents-max/packages/teambition-integration/src/storage.test.ts
++```
++
++Output:
++```text
++bun test v1.3.11 (af24e281)
++
++packages/teambition-integration/src/storage.test.ts:
++113 |     expect(taskJson).toContain('Preserve this description verbatim.')
++114 |     expect(taskJson).toContain('Keep this note verbatim.')
++115 |     expect(taskJson).toContain('design.pdf')
++116 |     expect(taskJson).not.toContain('top-secret')
++117 |     expect(taskJson).not.toContain('shhh')
++118 |     expect(taskJson).not.toContain('https://files.example.com/design.pdf')
++                               ^
++error: expect(received).not.toContain(expected)
++
++Expected to not contain: "https://files.example.com/design.pdf"
++Received: "{\n  \"summary\": {\n    \"taskId\": \"tw-100\",\n    \"title\": \"Stabilize Teambition sync\",\n    \"kind\": \"feature\",\n    \"projectId\": \"tw-project-1\",\n    \"updatedAt\": \"2026-07-12T10:00:00.000Z\"\n  },\n  \"comments\": [\n    {\n      \"commentId\": \"comment-1\",\n      \"content\": \"Keep this note verbatim.\",\n      \"createdAt\": \"2026-07-12T10:05:00.000Z\"\n    }\n  ],\n  \"progress\": {\n    \"percent\": 60,\n    \"updatedAt\": \"2026-07-12T10:06:00.000Z\",\n    \"note\": \"Halfway there.\"\n  },\n  \"binding\": {\n    \"projectId\": \"tw-project-1\",\n    \"scope\": {\n      \"type\": \"project\",\n      \"projectId\": \"tw-project-1\"\n    }\n  },\n  \"description\": \"Preserve this description verbatim.\",\n  \"attachments\": [\n    {\n      \"name\": \"design.pdf\",\n      \"url\": \"https://files.example.com/design.pdf\"\n    },\n    {\n      \"name\": \"secret.txt\",\n      \"url\": \"[REDACTED_MCP_URL]\"\n    }\n  ],\n  \"sourceMetadata\": {\n    \"sourceSlug\": \"teambition\",\n    \"requestId\": \"req-1\",\n    \"sourceUrl\": \"[REDACTED_MCP_URL]\"\n  },\n  \"agentInstructions\": [\n    \"Follow the source task exactly.\",\n    \"Do not expose credentials.\"\n  ]\n}"
++
++      at <anonymous> (/Users/admin/Workspace/ClaudeCode/craft-agents-max/packages/teambition-integration/src/storage.test.ts:118:26)
++(fail) Teambition storage > claims a task idempotently and persists redacted task snapshots plus sync logs [12.01ms]
++
++ 0 pass
++ 1 fail
++ 10 expect() calls
++Ran 1 test across 1 file. [95.00ms]
++```
++
++Green test, after the fix
++
++Command:
++```bash
++bun test /Users/admin/Workspace/ClaudeCode/craft-agents-max/packages/teambition-integration/src/storage.test.ts
++```
++
++Output:
++```text
++bun test v1.3.11 (af24e281)
++
++packages/teambition-integration/src/storage.test.ts:
++(pass) Teambition storage > claims a task idempotently and persists redacted task snapshots plus sync logs [9.68ms]
++
++ 1 pass
++ 0 fail
++ 31 expect() calls
++Ran 1 test across 1 file. [88.00ms]
++```
++
++Package typecheck, after the fix
++
++Command:
++```bash
++bun run --cwd /Users/admin/Workspace/ClaudeCode/craft-agents-max/packages/teambition-integration typecheck
++```
++
++Output:
++```text
++$ tsc --noEmit
++```
+diff --git a/packages/teambition-integration/src/bindings.ts b/packages/teambition-integration/src/bindings.ts
+new file mode 100644
+index 00000000..d6dd6ae1
+--- /dev/null
++++ b/packages/teambition-integration/src/bindings.ts
+@@ -0,0 +1,65 @@
++import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
++import { join } from 'node:path'
++
++export interface StoredTeambitionBinding {
++  provider: 'teambition'
++  taskId: string
++  sessionId: string
++  sourceSlug: string
++  state: 'claimed'
++  claimedAt: string
++}
++
++const INTEGRATION_DIR = ['integrations', 'teambition'] as const
++const BINDINGS_FILE = 'bindings.json'
++
++function bindingsDir(workspaceRoot: string): string {
++  return join(workspaceRoot, ...INTEGRATION_DIR)
++}
++
++function bindingsPath(workspaceRoot: string): string {
++  return join(bindingsDir(workspaceRoot), BINDINGS_FILE)
++}
++
++async function writeBindingsFile(filePath: string, bindings: StoredTeambitionBinding[]): Promise<void> {
++  const tempPath = `${filePath}.tmp`
++  await writeFile(tempPath, JSON.stringify(bindings, null, 2), 'utf-8')
++  await rename(tempPath, filePath)
++}
++
++export async function loadBindings(workspaceRoot: string): Promise<StoredTeambitionBinding[]> {
++  try {
++    const raw = await readFile(bindingsPath(workspaceRoot), 'utf-8')
++    const parsed = JSON.parse(raw)
++    return Array.isArray(parsed) ? (parsed as StoredTeambitionBinding[]) : []
++  } catch {
++    return []
++  }
++}
++
++export async function claimBinding(
++  workspaceRoot: string,
++  binding: StoredTeambitionBinding,
++): Promise<StoredTeambitionBinding> {
++  const dir = bindingsDir(workspaceRoot)
++  const filePath = bindingsPath(workspaceRoot)
++  await mkdir(dir, { recursive: true })
++
++  const bindings = await loadBindings(workspaceRoot)
++  const existing = bindings.find((entry) => entry.taskId === binding.taskId)
++  if (existing) {
++    return existing
++  }
++
++  bindings.push(binding)
++  await writeBindingsFile(filePath, bindings)
++  return binding
++}
++
++export async function findBindingByTaskId(
++  workspaceRoot: string,
++  taskId: string,
++): Promise<StoredTeambitionBinding | undefined> {
++  const bindings = await loadBindings(workspaceRoot)
++  return bindings.find((binding) => binding.taskId === taskId)
++}
+diff --git a/packages/teambition-integration/src/index.ts b/packages/teambition-integration/src/index.ts
+index cda5464c..8293da2d 100644
+--- a/packages/teambition-integration/src/index.ts
++++ b/packages/teambition-integration/src/index.ts
+@@ -1,2 +1,4 @@
+ export * from './domain'
+ export * from './gateway'
++export * from './bindings'
++export * from './task-bundle'
+diff --git a/packages/teambition-integration/src/storage.test.ts b/packages/teambition-integration/src/storage.test.ts
+new file mode 100644
+index 00000000..9cf4ce56
+--- /dev/null
++++ b/packages/teambition-integration/src/storage.test.ts
+@@ -0,0 +1,144 @@
++import { afterEach, describe, expect, it } from 'bun:test'
++import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
++import { join } from 'node:path'
++import { tmpdir } from 'node:os'
++import type { ExternalTaskBundle } from './domain'
++import {
++  appendSyncLog,
++  claimBinding,
++  findBindingByTaskId,
++  loadBindings,
++  writeTaskBundle,
++} from './index'
++
++function makeBundle(): ExternalTaskBundle {
++  return {
++    summary: {
++      taskId: 'tw-100',
++      title: 'Stabilize Teambition sync',
++      kind: 'feature',
++      projectId: 'tw-project-1',
++      updatedAt: '2026-07-12T10:00:00.000Z',
++    },
++    comments: [
++      {
++        commentId: 'comment-1',
++        content: 'Keep this note verbatim.',
++        createdAt: '2026-07-12T10:05:00.000Z',
++      },
++    ],
++    progress: {
++      percent: 60,
++      updatedAt: '2026-07-12T10:06:00.000Z',
++      note: 'Halfway there.',
++    },
++    binding: {
++      projectId: 'tw-project-1',
++      scope: { type: 'project', projectId: 'tw-project-1' },
++    },
++    description: 'Preserve this description verbatim.',
++    attachments: [
++      { name: 'design.pdf', url: 'https://files.example.com/design.pdf' },
++      {
++        name: 'secret.txt',
++        url: 'mcp://teambition/task/tw-100?accessToken=top-secret',
++      },
++    ],
++    sourceMetadata: {
++      sourceSlug: 'teambition',
++      requestId: 'req-1',
++      sourceUrl: 'mcp://teambition/task/tw-100?userToken=shhh',
++    },
++    agentInstructions: [
++      'Follow the source task exactly.',
++      'Do not expose credentials.',
++    ],
++  } as ExternalTaskBundle
++}
++
++describe('Teambition storage', () => {
++  const roots: string[] = []
++
++  afterEach(() => {
++    for (const root of roots.splice(0)) {
++      rmSync(root, { recursive: true, force: true })
++    }
++  })
++
++  it('claims a task idempotently and persists redacted task snapshots plus sync logs', async () => {
++    const root = mkdtempSync(join(tmpdir(), 'teambition-storage-'))
++    roots.push(root)
++
++    const first = await claimBinding(root, {
++      provider: 'teambition',
++      taskId: 'tw-100',
++      sessionId: 'session-1',
++      sourceSlug: 'teambition',
++      state: 'claimed',
++      claimedAt: '2026-07-12T10:00:00.000Z',
++    })
++    const second = await claimBinding(root, {
++      ...first,
++      sessionId: 'session-2',
++    })
++
++    expect(second.sessionId).toBe('session-1')
++    expect(await findBindingByTaskId(root, 'tw-100')).toEqual(first)
++
++    const bindings = await loadBindings(root)
++    expect(bindings).toHaveLength(1)
++
++    const bundle = makeBundle()
++    await writeTaskBundle(root, first.sessionId, bundle)
++    await appendSyncLog(root, {
++      operation: 'task.pull',
++      taskId: 'tw-100',
++      sessionId: first.sessionId,
++      timestamp: '2026-07-12T10:07:00.000Z',
++      result: 'ok',
++      requestId: 'req-1',
++      error: 'authorization=Bearer secret-value',
++    })
++
++    const dataDir = join(root, 'sessions', 'session-1', 'data', 'teambition')
++    const taskJson = readFileSync(join(dataDir, 'task.json'), 'utf-8')
++    const taskMarkdown = readFileSync(join(dataDir, 'task.md'), 'utf-8')
++    const syncLog = readFileSync(join(dataDir, 'sync-log.jsonl'), 'utf-8')
++    const parsedJson = JSON.parse(taskJson) as Record<string, unknown>
++
++    expect(parsedJson.summary).toMatchObject({
++      taskId: 'tw-100',
++      title: 'Stabilize Teambition sync',
++    })
++    expect(taskJson).toContain('Preserve this description verbatim.')
++    expect(taskJson).toContain('Keep this note verbatim.')
++    expect(taskJson).toContain('design.pdf')
++    expect(taskJson).not.toContain('top-secret')
++    expect(taskJson).not.toContain('shhh')
++    expect(taskJson).not.toContain('https://files.example.com/design.pdf')
++    expect(taskJson).toContain('[redacted-url]')
++    expect(taskJson).not.toContain('mcp://teambition/task/tw-100?accessToken=top-secret')
++
++    expect(taskMarkdown).toContain('# Stabilize Teambition sync')
++    expect(taskMarkdown).toContain('## Description')
++    expect(taskMarkdown).toContain('Preserve this description verbatim.')
++    expect(taskMarkdown).toContain('## Log/进展')
++    expect(taskMarkdown).toContain('Keep this note verbatim.')
++    expect(taskMarkdown).toContain('## Attachments')
++    expect(taskMarkdown).toContain('design.pdf')
++    expect(taskMarkdown).toContain('## Source metadata')
++    expect(taskMarkdown).toContain('## Agent instructions')
++    expect(taskMarkdown).not.toContain('top-secret')
++    expect(taskMarkdown).not.toContain('shhh')
++    expect(taskMarkdown).not.toContain('https://files.example.com/design.pdf')
++    expect(taskMarkdown).toContain('[redacted-url]')
++    expect(taskMarkdown).not.toContain('mcp://teambition/task/tw-100?accessToken=top-secret')
++
++    const [entry] = syncLog.trim().split('\n')
++    expect(entry).toBeDefined()
++    expect(entry!).toContain('"operation":"task.pull"')
++    expect(entry!).toContain('"requestId":"req-1"')
++    expect(entry!).not.toContain('secret-value')
++    expect(entry!).not.toContain('authorization')
++  })
++})
+diff --git a/packages/teambition-integration/src/task-bundle.ts b/packages/teambition-integration/src/task-bundle.ts
+new file mode 100644
+index 00000000..792a933c
+--- /dev/null
++++ b/packages/teambition-integration/src/task-bundle.ts
+@@ -0,0 +1,176 @@
++import { appendFile, mkdir, rename, writeFile } from 'node:fs/promises'
++import { join } from 'node:path'
++import type { ExternalTaskBundle } from './domain'
++
++type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue }
++
++export interface SyncLogEntry {
++  operation: string
++  taskId: string
++  sessionId: string
++  timestamp: string
++  result: string
++  requestId?: string
++  error?: string
++}
++
++type LooseBundle = ExternalTaskBundle & Record<string, unknown>
++
++const REDACTED = '[REDACTED]'
++const REDACTED_MCP_URL = '[REDACTED_MCP_URL]'
++const REDACTED_URL = '[redacted-url]'
++const SECRET_PATTERNS = [/userToken/i, /authorization/i, /appSecret/i, /accessToken/i]
++
++function dataDir(workspaceRoot: string, sessionId: string): string {
++  return join(workspaceRoot, 'sessions', sessionId, 'data', 'teambition')
++}
++
++function toJsonValue(value: unknown): JsonValue {
++  if (
++    value === null ||
++    typeof value === 'string' ||
++    typeof value === 'number' ||
++    typeof value === 'boolean'
++  ) {
++    return sanitizeString(value)
++  }
++
++  if (Array.isArray(value)) {
++    return value.map((item) => toJsonValue(item))
++  }
++
++  if (typeof value === 'object' && value) {
++    return Object.fromEntries(
++      Object.entries(value).map(([key, entry]) => [key, toJsonValue(entry)]),
++    )
++  }
++
++  return String(value)
++}
++
++function sanitizeString(value: unknown): JsonValue {
++  if (typeof value !== 'string') {
++    return value as Exclude<JsonValue, string>
++  }
++
++  if (value.startsWith('mcp://')) {
++    return REDACTED_MCP_URL
++  }
++
++  if (value.startsWith('http://') || value.startsWith('https://')) {
++    return REDACTED_URL
++  }
++
++  return SECRET_PATTERNS.some((pattern) => pattern.test(value)) ? REDACTED : value
++}
++
++function getOptionalArray(bundle: LooseBundle, key: string): unknown[] {
++  const value = bundle[key]
++  return Array.isArray(value) ? value : []
++}
++
++function getOptionalText(bundle: LooseBundle, key: string): string | undefined {
++  const value = bundle[key]
++  return typeof value === 'string' && value.trim() ? value : undefined
++}
++
++function getOptionalRecord(bundle: LooseBundle, key: string): Record<string, unknown> | undefined {
++  const value = bundle[key]
++  return typeof value === 'object' && value !== null && !Array.isArray(value)
++    ? (value as Record<string, unknown>)
++    : undefined
++}
++
++function renderList(items: string[]): string {
++  return items.length > 0 ? items.map((item) => `- ${item}`).join('\n') : '- None'
++}
++
++function renderKeyValues(record: Record<string, unknown> | undefined): string {
++  if (!record) return '- None'
++  const lines = Object.entries(record).map(([key, value]) => `- ${key}: ${String(toJsonValue(value))}`)
++  return lines.length > 0 ? lines.join('\n') : '- None'
++}
++
++function renderComments(bundle: ExternalTaskBundle): string {
++  const commentLines = bundle.comments.map(
++    (comment) => `- ${comment.createdAt} ${comment.content}`,
++  )
++  if (bundle.progress) {
++    commentLines.push(
++      `- ${bundle.progress.updatedAt} ${bundle.progress.percent}%${bundle.progress.note ? ` — ${bundle.progress.note}` : ''}`,
++    )
++  }
++  return commentLines.length > 0 ? commentLines.join('\n') : '- None'
++}
++
++function renderAttachments(bundle: LooseBundle): string {
++  const attachments = getOptionalArray(bundle, 'attachments').map((item) =>
++    typeof item === 'object' && item
++      ? Object.values(item as Record<string, unknown>)
++          .map((value) => String(toJsonValue(value)))
++          .join(' ')
++          .trim()
++      : String(toJsonValue(item)),
++  )
++  return renderList(attachments.filter(Boolean))
++}
++
++function renderAgentInstructions(bundle: LooseBundle): string {
++  const instructions = getOptionalArray(bundle, 'agentInstructions').map((item) => String(toJsonValue(item)))
++  return renderList(instructions.filter(Boolean))
++}
++
++function buildMarkdown(bundle: LooseBundle): string {
++  const description = getOptionalText(bundle, 'description') ?? '- None'
++  const sourceMetadata = getOptionalRecord(bundle, 'sourceMetadata')
++
++  return [
++    `# ${bundle.summary.title}`,
++    '',
++    '## Description',
++    description,
++    '',
++    '## Log/进展',
++    renderComments(bundle),
++    '',
++    '## Attachments',
++    renderAttachments(bundle),
++    '',
++    '## Source metadata',
++    renderKeyValues(sourceMetadata),
++    '',
++    '## Agent instructions',
++    renderAgentInstructions(bundle),
++    '',
++  ]
++    .map((line) => String(toJsonValue(line)))
++    .join('\n')
++}
++
++async function writeAtomic(filePath: string, content: string): Promise<void> {
++  const tempPath = `${filePath}.tmp`
++  await writeFile(tempPath, content, 'utf-8')
++  await rename(tempPath, filePath)
++}
++
++export async function writeTaskBundle(
++  workspaceRoot: string,
++  sessionId: string,
++  bundle: ExternalTaskBundle,
++): Promise<void> {
++  const dir = dataDir(workspaceRoot, sessionId)
++  await mkdir(dir, { recursive: true })
++
++  const looseBundle = bundle as LooseBundle
++  const sanitizedBundle = toJsonValue(looseBundle)
++
++  await writeAtomic(join(dir, 'task.json'), JSON.stringify(sanitizedBundle, null, 2))
++  await writeAtomic(join(dir, 'task.md'), buildMarkdown(looseBundle))
++}
++
++export async function appendSyncLog(workspaceRoot: string, entry: SyncLogEntry): Promise<void> {
++  const dir = dataDir(workspaceRoot, entry.sessionId)
++  await mkdir(dir, { recursive: true })
++  const sanitizedEntry = toJsonValue(entry)
++  await appendFile(join(dir, 'sync-log.jsonl'), `${JSON.stringify(sanitizedEntry)}\n`, 'utf-8')
++}
