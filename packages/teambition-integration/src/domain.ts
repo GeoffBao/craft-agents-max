@@ -34,6 +34,10 @@ export interface ExternalTaskBundle {
   binding?: TeambitionBinding
   comments: ExternalTaskComment[]
   progress?: ExternalTaskProgress
+  description?: string
+  attachments?: Record<string, unknown>[]
+  sourceMetadata?: Record<string, unknown>
+  agentInstructions?: string[]
 }
 
 export interface SyncResult {

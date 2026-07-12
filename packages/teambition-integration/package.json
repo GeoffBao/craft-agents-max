@@ -11,6 +11,9 @@
     "./domain": "./src/domain.ts",
     "./gateway": "./src/gateway.ts"
   },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0"
+  },
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit"

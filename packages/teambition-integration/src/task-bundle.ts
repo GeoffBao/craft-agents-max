@@ -20,6 +20,7 @@ const REDACTED = '[REDACTED]'
 const REDACTED_MCP_URL = '[REDACTED_MCP_URL]'
 const REDACTED_URL = '[redacted-url]'
 const SECRET_PATTERNS = [/userToken/i, /authorization/i, /appSecret/i, /accessToken/i]
+const HTTP_URL_PATTERN = /https?:\/\/[^\s"'<>]+/g
 
 function dataDir(workspaceRoot: string, sessionId: string): string {
   return join(workspaceRoot, 'sessions', sessionId, 'data', 'teambition')
@@ -57,11 +58,11 @@ function sanitizeString(value: unknown): JsonValue {
     return REDACTED_MCP_URL
   }
 
-  if (value.startsWith('http://') || value.startsWith('https://')) {
-    return REDACTED_URL
-  }
+  const withRedactedUrls = value.replace(HTTP_URL_PATTERN, REDACTED_URL)
 
-  return SECRET_PATTERNS.some((pattern) => pattern.test(value)) ? REDACTED : value
+  return SECRET_PATTERNS.some((pattern) => pattern.test(withRedactedUrls))
+    ? REDACTED
+    : withRedactedUrls
 }
 
 function getOptionalArray(bundle: LooseBundle, key: string): unknown[] {

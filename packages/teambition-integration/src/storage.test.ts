@@ -23,7 +23,7 @@ function makeBundle(): ExternalTaskBundle {
     comments: [
       {
         commentId: 'comment-1',
-        content: 'Keep this note verbatim.',
+        content: 'Keep this note verbatim and review https://docs.example.com/runbook?foo=bar today.',
         createdAt: '2026-07-12T10:05:00.000Z',
       },
     ],
@@ -36,7 +36,7 @@ function makeBundle(): ExternalTaskBundle {
       projectId: 'tw-project-1',
       scope: { type: 'project', projectId: 'tw-project-1' },
     },
-    description: 'Preserve this description verbatim.',
+    description: 'Preserve this description verbatim and see https://example.com/spec?token=abc for context.',
     attachments: [
       { name: 'design.pdf', url: 'https://files.example.com/design.pdf' },
       {
@@ -48,6 +48,7 @@ function makeBundle(): ExternalTaskBundle {
       sourceSlug: 'teambition',
       requestId: 'req-1',
       sourceUrl: 'mcp://teambition/task/tw-100?userToken=shhh',
+      note: 'Originated from https://teambition.example.com/tasks/tw-100 and was mirrored locally.',
     },
     agentInstructions: [
       'Follow the source task exactly.',
@@ -110,27 +111,34 @@ describe('Teambition storage', () => {
       taskId: 'tw-100',
       title: 'Stabilize Teambition sync',
     })
-    expect(taskJson).toContain('Preserve this description verbatim.')
-    expect(taskJson).toContain('Keep this note verbatim.')
+    expect(taskJson).toContain('Preserve this description verbatim and see [redacted-url] for context.')
+    expect(taskJson).toContain('Keep this note verbatim and review [redacted-url] today.')
     expect(taskJson).toContain('design.pdf')
     expect(taskJson).not.toContain('top-secret')
     expect(taskJson).not.toContain('shhh')
     expect(taskJson).not.toContain('https://files.example.com/design.pdf')
+    expect(taskJson).not.toContain('https://example.com/spec?token=abc')
+    expect(taskJson).not.toContain('https://docs.example.com/runbook?foo=bar')
+    expect(taskJson).not.toContain('https://teambition.example.com/tasks/tw-100')
     expect(taskJson).toContain('[redacted-url]')
     expect(taskJson).not.toContain('mcp://teambition/task/tw-100?accessToken=top-secret')
 
     expect(taskMarkdown).toContain('# Stabilize Teambition sync')
     expect(taskMarkdown).toContain('## Description')
-    expect(taskMarkdown).toContain('Preserve this description verbatim.')
+    expect(taskMarkdown).toContain('Preserve this description verbatim and see [redacted-url] for context.')
     expect(taskMarkdown).toContain('## Log/进展')
-    expect(taskMarkdown).toContain('Keep this note verbatim.')
+    expect(taskMarkdown).toContain('Keep this note verbatim and review [redacted-url] today.')
     expect(taskMarkdown).toContain('## Attachments')
     expect(taskMarkdown).toContain('design.pdf')
     expect(taskMarkdown).toContain('## Source metadata')
+    expect(taskMarkdown).toContain('- note: Originated from [redacted-url] and was mirrored locally.')
     expect(taskMarkdown).toContain('## Agent instructions')
     expect(taskMarkdown).not.toContain('top-secret')
     expect(taskMarkdown).not.toContain('shhh')
     expect(taskMarkdown).not.toContain('https://files.example.com/design.pdf')
+    expect(taskMarkdown).not.toContain('https://example.com/spec?token=abc')
+    expect(taskMarkdown).not.toContain('https://docs.example.com/runbook?foo=bar')
+    expect(taskMarkdown).not.toContain('https://teambition.example.com/tasks/tw-100')
     expect(taskMarkdown).toContain('[redacted-url]')
     expect(taskMarkdown).not.toContain('mcp://teambition/task/tw-100?accessToken=top-secret')
 
