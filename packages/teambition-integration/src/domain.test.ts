@@ -23,6 +23,17 @@ describe('Teambition domain', () => {
     expect(parseExternalTaskSummary(input)).toEqual(input)
   })
 
+  it('accepts a valid bug task with a project binding', () => {
+    const input: ExternalTaskSummary = {
+      taskId: 'tw-100-bug',
+      title: 'Fix login timeout',
+      kind: 'bug',
+      projectId: 'tw-project-1',
+      updatedAt: '2026-07-12T10:00:00.000Z',
+    }
+    expect(parseExternalTaskSummary(input)).toEqual(input)
+  })
+
   it('accepts a valid generic task without a project binding', () => {
     const input: ExternalTaskSummary = {
       taskId: 'tw-101',
@@ -51,6 +62,39 @@ describe('Teambition domain', () => {
         title: 'Add export',
         kind: 'feature',
         updatedAt: '2026-07-12T10:00:00.000Z',
+      }),
+    ).toThrow()
+  })
+
+  it('rejects an empty taskId', () => {
+    expect(() =>
+      parseExternalTaskSummary({
+        taskId: '   ',
+        title: 'Add export',
+        kind: 'task',
+        updatedAt: '2026-07-12T10:00:00.000Z',
+      }),
+    ).toThrow()
+  })
+
+  it('rejects an empty title', () => {
+    expect(() =>
+      parseExternalTaskSummary({
+        taskId: 'tw-103',
+        title: '   ',
+        kind: 'task',
+        updatedAt: '2026-07-12T10:00:00.000Z',
+      }),
+    ).toThrow()
+  })
+
+  it('rejects an empty updatedAt', () => {
+    expect(() =>
+      parseExternalTaskSummary({
+        taskId: 'tw-104',
+        title: 'Add export',
+        kind: 'task',
+        updatedAt: '   ',
       }),
     ).toThrow()
   })
