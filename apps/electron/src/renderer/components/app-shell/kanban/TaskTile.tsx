@@ -31,6 +31,8 @@ import { StatusBadge } from './StatusBadge'
 import { ModelChip } from './ModelChip'
 import { SubtaskRow } from './SubtaskRow'
 import { SubtaskProgress } from './SubtaskProgress'
+import { TeambitionTaskBadge } from '../teambition/TeambitionTaskBadge'
+import { TeambitionTaskActions } from '../teambition/TeambitionTaskActions'
 import type { KanbanModelProviderGroup, KanbanProject, KanbanTask } from './types'
 
 /**
@@ -187,7 +189,7 @@ export function TaskTile({
       )}
 
       <div className="relative p-3 pl-3.5">
-        {(project || task.isFlagged) && (
+        {(project || task.isFlagged || task.teambition) && (
           // Right padding keeps the flag clear of the hover-revealed corner pencil.
           <div className={cn('mb-1.5 flex items-center justify-between gap-2', onEdit && task.isFlagged && 'pr-7')}>
             {project ? (
@@ -204,6 +206,13 @@ export function TaskTile({
             )}
             {task.isFlagged && (
               <Flag className="h-3.5 w-3.5 shrink-0 fill-amber-500 text-amber-500" aria-hidden />
+            )}
+            {task.teambition && (
+              <TeambitionTaskBadge
+                taskId={task.teambition.taskId}
+                kind={task.teambition.kind}
+                projectName={task.teambition.projectName}
+              />
             )}
           </div>
         )}
@@ -302,7 +311,18 @@ export function TaskTile({
         )}
 
         <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-border/40 pt-2">
-          <ModelChip model={task.model} />
+          <div className="flex items-center gap-1.5">
+            <ModelChip model={task.model} />
+            {task.teambition && (
+              <TeambitionTaskActions
+                taskId={task.teambition.taskId}
+                kind={task.teambition.kind}
+                syncState={task.teambition.syncState}
+                capabilities={[]}
+                isWorkspaceOnly={!task.projectId}
+              />
+            )}
+          </div>
           {(relativeTime || hasMessages) && (
             <div className="flex shrink-0 items-center gap-2 text-[11px] text-foreground/45">
               {relativeTime && (

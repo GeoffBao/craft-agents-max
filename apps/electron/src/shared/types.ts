@@ -670,6 +670,12 @@ export interface ElectronAPI {
   deleteProjectAsset(workspaceId: string, projectSlug: string, filename: string): Promise<void>
   onProjectsChanged(callback: (workspaceId: string, projects: unknown) => void): () => void
 
+  // Teambition (workspace-scoped)
+  listTeambitionTasks(workspaceId: string): Promise<import('@craft-agent/shared/protocol/dto').ListTeambitionTasksResponse>
+  claimTeambitionTask(workspaceId: string, input: import('@craft-agent/shared/protocol/dto').ClaimTeambitionTaskRequest): Promise<import('@craft-agent/shared/protocol/dto').ClaimTeambitionTaskResponse>
+  getTeambitionBinding(workspaceId: string, taskId: string): Promise<import('@craft-agent/shared/protocol/dto').GetTeambitionBindingResponse | null>
+  getTeambitionCapabilities(workspaceId: string): Promise<import('@craft-agent/shared/protocol/dto').GetTeambitionCapabilitiesResponse>
+
   // Automations
   getAutomations(workspaceId: string): Promise<unknown>
 

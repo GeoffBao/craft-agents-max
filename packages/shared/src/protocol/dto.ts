@@ -833,3 +833,70 @@ export interface DeepLinkNavigation {
   action?: string
   actionParams?: Record<string, string>
 }
+
+// ---------------------------------------------------------------------------
+// Teambition RPC DTOs
+// ---------------------------------------------------------------------------
+
+export type TeambitionTaskKind = 'feature' | 'bug' | 'task'
+
+export type ExecutionScope =
+  | { type: 'workspace' }
+  | { type: 'project'; projectId: string }
+
+export interface RendererTaskSummary {
+  taskId: string
+  title: string
+  kind: TeambitionTaskKind
+  updatedAt: string
+  /** Teambition project id (always present for feature/bug, optional for task) */
+  projectId?: string
+  /** Display name of the Teambition project */
+  projectName?: string
+  /** Whether this task is already claimed (bound to a Craft session) */
+  hasBinding: boolean
+  /** Session id if already bound */
+  sessionId?: string
+}
+
+export type TeambitionCapabilityDto =
+  | 'identity'
+  | 'task.list'
+  | 'task.detail'
+  | 'task.progress.read'
+  | 'task.progress.write'
+  | 'task.status.write'
+  | 'task.comment.write'
+  | 'worktime.read'
+  | 'worktime.write'
+
+export interface ListTeambitionTasksResponse {
+  tasks: RendererTaskSummary[]
+  capabilities: TeambitionCapabilityDto[]
+}
+
+export interface ClaimTeambitionTaskRequest {
+  workspaceId: string
+  taskId: string
+  kind: TeambitionTaskKind
+  title: string
+  scope: ExecutionScope
+}
+
+export interface ClaimTeambitionTaskResponse {
+  sessionId: string
+  taskId: string
+  /** Whether the session was newly created or pre-existing */
+  created: boolean
+}
+
+export interface GetTeambitionBindingResponse {
+  taskId?: string
+  sessionId?: string
+  state?: string
+  claimedAt?: string
+}
+
+export interface GetTeambitionCapabilitiesResponse {
+  capabilities: TeambitionCapabilityDto[]
+}

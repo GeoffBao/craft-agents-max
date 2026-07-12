@@ -34,6 +34,18 @@ export type TaskEditorTarget =
   | { mode: 'create'; initialProjectId?: string }
   | { mode: 'edit'; sessionId: string; taskSlug?: string; initialTitle?: string }
 
+/**
+ * Non-persistent Teambition view fields joined onto KanbanTask at render time.
+ * Derived from binding data — never written to SessionMeta persistence.
+ */
+export interface TeambitionViewFields {
+  taskId: string
+  kind: import('@craft-agent/shared/protocol/dto').TeambitionTaskKind
+  syncState: 'synced' | 'pending' | 'conflict' | 'stale'
+  /** Display name of the Teambition project */
+  projectName?: string
+}
+
 export interface KanbanSubtask {
   /** Row key. A child session id, or `node:<nodeId>` for an authored-but-never-run spec node. */
   id: string
@@ -83,6 +95,11 @@ export interface KanbanTask {
   messageCount?: number
   /** Accrued cost in USD, shown in the footer when available. */
   costUsd?: number
+  /**
+   * Teambition binding data joined at render time.
+   * Non-persistent — never stored in SessionMeta.
+   */
+  teambition?: TeambitionViewFields
 }
 
 export interface KanbanProject {

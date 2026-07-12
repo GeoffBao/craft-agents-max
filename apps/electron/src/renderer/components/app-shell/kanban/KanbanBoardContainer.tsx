@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Plus } from 'lucide-react'
+import { Plus, Download } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { useTranslation } from 'react-i18next'
@@ -17,11 +17,13 @@ import { DEFAULT_MODEL, getModelShortName } from '@config/models'
 import { getDefaultModelsForConnection, type LlmConnectionWithStatus } from '@config/llm-connections'
 import type { SessionStatus } from '@/config/session-status-config'
 import type { KanbanColumnDef } from '@craft-agent/shared/projects/types'
+import { teambitionBindingMapAtom, teambitionPickerOpenAtom } from '@/atoms/teambition'
 import { KanbanBoard } from './KanbanBoard'
 import { KANBAN_COLUMNS, statusToColumn } from './status-column'
 import { BoardListToggle } from './BoardListToggle'
 import { KanbanProjectFilter, type KanbanProjectFilterOption } from './KanbanProjectFilter'
 import { TaskEditor } from './TaskEditor'
+import { TeambitionTaskPicker } from '../teambition/TeambitionTaskPicker'
 import { mergeSubtaskRows, type SpecNodeSummary, type SubtaskChildRow } from './subtask-merge'
 import type { SpecNode } from './task-spec-form'
 import type {
@@ -126,6 +128,8 @@ export function KanbanBoardContainer() {
   }, [activeWorkspaceId, projects, setProjectFilter])
 
   const [expandedTaskIds, setExpandedTaskIds] = React.useState<Set<string>>(() => new Set())
+  const [pickerOpen, setPickerOpen] = useAtom(teambitionPickerOpenAtom)
+  const bindingMap = useAtomValue(teambitionBindingMapAtom)
 
   // Full-pane Task editor overlays the board pane (no global route needed). "Add task" opens it in
   // create mode; the tile "Edit task" affordance opens it in edit mode pointed at that session.
@@ -265,6 +269,17 @@ export function KanbanBoardContainer() {
       // or pending when never run) plus unadopted quick-adds; plain tiles show children.
       const specNodes = meta.taskSlug ? specNodesBySlug.get(meta.taskSlug) : undefined
       const subtasks = mergeSubtaskRows(specNodes, children, DEFAULT_MODEL)
+      // Join Teambition binding data (non-persistent view field)
+      const binding = bindingMap.get(meta.id)
+      const teambition = binding
+        ? {
+            taskId: binding.taskId,
+            kind: binding.kind as import('@craft-agent/shared/protocol/dto').TeambitionTaskKind,
+            syncState: 'synced' as const,
+            ...(binding.projectName ? { projectName: binding.projectName } : {}),
+          }
+        : undefined
+
       result.push({
         id: meta.id,
         title: getSessionTitle(meta),
@@ -283,10 +298,11 @@ export function KanbanBoardContainer() {
         lastMessageAt: meta.lastMessageAt,
         messageCount: meta.messageCount,
         costUsd: meta.tokenUsage?.costUsd,
+        teambition,
       })
     }
     return result
-  }, [metaMap, statusesById, specNodesBySlug])
+  }, [metaMap, statusesById, specNodesBySlug, bindingMap])
 
   // Project filter: empty selection = show all. While a filter is active, tiles
   // with no project are hidden (an explicit "No project" option is a later add).
@@ -486,6 +502,19 @@ export function KanbanBoardContainer() {
     [editingProject, handleUpdateColumn, setColumnStatus]
   )
 
+  // Teambition task picker
+  const handleTeambitionClaimed = React.useCallback(
+    (_sessionId: string, _taskId: string) => {
+      setPickerOpen(false)
+      // The KanbanBoard will re-render with the new tile when metaMap updates
+    },
+    [setPickerOpen],
+  )
+
+  const handleTeambitionClose = React.useCallback(() => {
+    setPickerOpen(false)
+  }, [setPickerOpen])
+
   // Board clicks land on All Sessions with the task's scope applied as the NORMAL,
   // user-clearable header-chip filters: label filter = the session's per-task item
   // label (`TASK-<slug>-<N>` — exactly this task's family; legacy root-only sessions
@@ -557,7 +586,16 @@ export function KanbanBoardContainer() {
   }
 
   return (
-    <div className="flex h-full flex-col bg-background">
+    <>
+      {pickerOpen && activeWorkspaceId && (
+        <TeambitionTaskPicker
+          workspaceId={activeWorkspaceId}
+          projects={projects.map(p => ({ id: p.config.id, name: p.config.name }))}
+          onClaimed={handleTeambitionClaimed}
+          onClose={handleTeambitionClose}
+        />
+      )}
+      <div className="flex h-full flex-col bg-background">
       <div className="flex items-center justify-between gap-2 border-b border-border/50 px-4 py-2.5">
         <div className="flex min-w-0 items-center gap-2.5">
           <span className="text-sm font-medium">{t('kanban.allTasks')}</span>
@@ -578,6 +616,15 @@ export function KanbanBoardContainer() {
             className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-[12.5px] font-semibold text-foreground transition-colors hover:bg-foreground/[0.03] disabled:opacity-50"
           >
             <Plus className="h-3.5 w-3.5" strokeWidth={2.5} /> {t('kanban.newTask')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setPickerOpen(true)}
+            disabled={!activeWorkspaceId}
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-[12.5px] font-semibold text-foreground transition-colors hover:bg-foreground/[0.03] disabled:opacity-50"
+            title={t('teambition.picker.title')}
+          >
+            <Download className="h-3.5 w-3.5" strokeWidth={2.5} /> {t('teambition.picker.claimFromTW')}
           </button>
           <BoardListToggle
             value="board"
@@ -619,5 +666,6 @@ export function KanbanBoardContainer() {
         />
       </div>
     </div>
+    </>
   )
 }

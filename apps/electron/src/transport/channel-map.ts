@@ -383,6 +383,12 @@ export const CHANNEL_MAP = {
   setDefaultLlmConnection: invoke(RPC_CHANNELS.llmConnections.SET_DEFAULT),
   setWorkspaceDefaultLlmConnection: invoke(RPC_CHANNELS.llmConnections.SET_WORKSPACE_DEFAULT),
 
+  // Teambition
+  listTeambitionTasks: invoke(RPC_CHANNELS.teambition.LIST_TASKS),
+  claimTeambitionTask: invoke(RPC_CHANNELS.teambition.CLAIM_TASK),
+  getTeambitionBinding: invoke(RPC_CHANNELS.teambition.GET_BINDING),
+  getTeambitionCapabilities: invoke(RPC_CHANNELS.teambition.CAPABILITIES),
+
   // Projects
   getProjects: invoke(RPC_CHANNELS.projects.GET),
   getProject: invoke(RPC_CHANNELS.projects.GET_ONE),

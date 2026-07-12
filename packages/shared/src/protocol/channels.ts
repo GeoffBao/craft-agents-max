@@ -393,6 +393,15 @@ export const RPC_CHANNELS = {
     EXPORT: 'resources:export',
     IMPORT: 'resources:import',
   },
+  teambition: {
+    LIST_TASKS: 'teambition:listMyTasks',
+    CLAIM_TASK: 'teambition:claimTask',
+    GET_BINDING: 'teambition:getBinding',
+    CAPABILITIES: 'teambition:capabilities',
+    SYNC_PROGRESS: 'teambition:syncProgress',
+    UPDATE_STATUS: 'teambition:updateStatus',
+    BIND_PROJECT: 'teambition:bindProject',
+  },
   projects: {
     GET: 'projects:get',
     GET_ONE: 'projects:getOne',
