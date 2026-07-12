@@ -18,6 +18,7 @@ type LooseBundle = ExternalTaskBundle & Record<string, unknown>
 
 const REDACTED = '[REDACTED]'
 const REDACTED_MCP_URL = '[REDACTED_MCP_URL]'
+const REDACTED_URL = '[redacted-url]'
 const SECRET_PATTERNS = [/userToken/i, /authorization/i, /appSecret/i, /accessToken/i]
 
 function dataDir(workspaceRoot: string, sessionId: string): string {
@@ -54,6 +55,10 @@ function sanitizeString(value: unknown): JsonValue {
 
   if (value.startsWith('mcp://')) {
     return REDACTED_MCP_URL
+  }
+
+  if (value.startsWith('http://') || value.startsWith('https://')) {
+    return REDACTED_URL
   }
 
   return SECRET_PATTERNS.some((pattern) => pattern.test(value)) ? REDACTED : value

@@ -112,8 +112,11 @@ describe('Teambition storage', () => {
     })
     expect(taskJson).toContain('Preserve this description verbatim.')
     expect(taskJson).toContain('Keep this note verbatim.')
+    expect(taskJson).toContain('design.pdf')
     expect(taskJson).not.toContain('top-secret')
     expect(taskJson).not.toContain('shhh')
+    expect(taskJson).not.toContain('https://files.example.com/design.pdf')
+    expect(taskJson).toContain('[redacted-url]')
     expect(taskJson).not.toContain('mcp://teambition/task/tw-100?accessToken=top-secret')
 
     expect(taskMarkdown).toContain('# Stabilize Teambition sync')
@@ -127,6 +130,8 @@ describe('Teambition storage', () => {
     expect(taskMarkdown).toContain('## Agent instructions')
     expect(taskMarkdown).not.toContain('top-secret')
     expect(taskMarkdown).not.toContain('shhh')
+    expect(taskMarkdown).not.toContain('https://files.example.com/design.pdf')
+    expect(taskMarkdown).toContain('[redacted-url]')
     expect(taskMarkdown).not.toContain('mcp://teambition/task/tw-100?accessToken=top-secret')
 
     const [entry] = syncLog.trim().split('\n')
