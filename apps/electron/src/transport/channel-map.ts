@@ -388,6 +388,9 @@ export const CHANNEL_MAP = {
   claimTeambitionTask: invoke(RPC_CHANNELS.teambition.CLAIM_TASK),
   getTeambitionBinding: invoke(RPC_CHANNELS.teambition.GET_BINDING),
   getTeambitionCapabilities: invoke(RPC_CHANNELS.teambition.CAPABILITIES),
+  syncTeambitionProgress: invoke(RPC_CHANNELS.teambition.SYNC_PROGRESS),
+  updateTeambitionStatus: invoke(RPC_CHANNELS.teambition.UPDATE_STATUS),
+  bindTeambitionProject: invoke(RPC_CHANNELS.teambition.BIND_PROJECT),
 
   // Projects
   getProjects: invoke(RPC_CHANNELS.projects.GET),

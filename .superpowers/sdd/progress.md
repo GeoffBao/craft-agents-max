@@ -19,12 +19,17 @@ Task 4: pending (RPC skeleton in place for Task 5)
 - DTO types + channels + preload stubs done as part of Task 5
 - Handler implementations still need TeambitionGateway + SessionManager wiring
 
-Task 5: complete (working tree, ready to commit)
+Task 5: complete (committed a58f719c)
 - Files: TeambitionTaskPicker.tsx, TeambitionTaskBadge.tsx, TeambitionTaskActions.tsx, atoms/teambition.ts, test
 - 12 tests PASS (scope rules, capabilities, view-model join)
-- KanbanTypes: TeambitionViewFields (non-persistent)
-- KanbanBoardContainer: "从 TW 领取任务" button + binding join + picker render
-- TaskTile: TW badge + actions menu
-- i18n: 32 strings each (zh-Hans + en)
-- RPC stubs: DTOs, channels, ElectronAPI types, channel-map, server handler
 - See .superpowers/sdd/task-5-brief.md, task-5-report.md
+
+Task 6: complete (working tree, ready to commit)
+- Files: sync-policy.ts, sync-policy.test.ts, teambition.ts (handler rewrite), teambition.test.ts
+- New sync-policy module: conflict detection, fingerprint dedup, idempotency, sync logging
+- 31 new tests (16 sync-policy + 15 handler patterns)
+- RPC handlers: syncProgress, updateStatus, bindProject fully wired
+- UI: TeambitionTaskActions updated with pending/conflict states + actual RPC calls
+- RPC index: registerTeambitionHandlers added
+- Preload: channel-map + ElectronAPI types for 3 new sync operations
+- See .superpowers/sdd/task-6-brief.md, task-6-report.md

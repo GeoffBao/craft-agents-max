@@ -900,3 +900,57 @@ export interface GetTeambitionBindingResponse {
 export interface GetTeambitionCapabilitiesResponse {
   capabilities: TeambitionCapabilityDto[]
 }
+
+// ---------------------------------------------------------------------------
+// Teambition sync/status/bind DTOs (Task 6)
+// ---------------------------------------------------------------------------
+
+export type SyncResultKind = 'synced' | 'conflict' | 'already_synced' | 'error'
+
+export interface TeambitionSyncProgressRequest {
+  workspaceId: string
+  taskId: string
+  sessionId: string
+  percent: number
+  note?: string
+}
+
+export interface TeambitionSyncProgressResponse {
+  result: SyncResultKind
+  message: string
+  /** Timestamp of the sync (ISO) */
+  syncedAt?: string
+  /** When result is 'conflict', the remote task's updatedAt */
+  remoteUpdatedAt?: string
+}
+
+export interface TeambitionUpdateStatusRequest {
+  workspaceId: string
+  taskId: string
+  sessionId: string
+  /** The target status ID from the Teambition project's workflow */
+  statusId: string
+  note?: string
+}
+
+export interface TeambitionUpdateStatusResponse {
+  result: SyncResultKind
+  message: string
+  syncedAt?: string
+  remoteUpdatedAt?: string
+}
+
+export interface TeambitionBindProjectRequest {
+  workspaceId: string
+  taskId: string
+  sessionId: string
+  /** Craft project ID to bind (must not be empty for feature/bug) */
+  projectId: string | null
+}
+
+export interface TeambitionBindProjectResponse {
+  result: 'bound' | 'already_bound' | 'error'
+  message: string
+  /** The session ID (unchanged when already_bound) */
+  sessionId: string
+}

@@ -675,6 +675,9 @@ export interface ElectronAPI {
   claimTeambitionTask(workspaceId: string, input: import('@craft-agent/shared/protocol/dto').ClaimTeambitionTaskRequest): Promise<import('@craft-agent/shared/protocol/dto').ClaimTeambitionTaskResponse>
   getTeambitionBinding(workspaceId: string, taskId: string): Promise<import('@craft-agent/shared/protocol/dto').GetTeambitionBindingResponse | null>
   getTeambitionCapabilities(workspaceId: string): Promise<import('@craft-agent/shared/protocol/dto').GetTeambitionCapabilitiesResponse>
+  syncTeambitionProgress(request: import('@craft-agent/shared/protocol/dto').TeambitionSyncProgressRequest): Promise<import('@craft-agent/shared/protocol/dto').TeambitionSyncProgressResponse>
+  updateTeambitionStatus(request: import('@craft-agent/shared/protocol/dto').TeambitionUpdateStatusRequest): Promise<import('@craft-agent/shared/protocol/dto').TeambitionUpdateStatusResponse>
+  bindTeambitionProject(request: import('@craft-agent/shared/protocol/dto').TeambitionBindProjectRequest): Promise<import('@craft-agent/shared/protocol/dto').TeambitionBindProjectResponse>
 
   // Automations
   getAutomations(workspaceId: string): Promise<unknown>
