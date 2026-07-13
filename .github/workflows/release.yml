@@ -40,6 +40,7 @@ jobs:
       - name: Build macOS arm64 package
         run: bash apps/electron/scripts/build-dmg.sh arm64
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Optional signing/notarization. Builds remain unsigned when unset.
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -73,6 +74,8 @@ jobs:
       - name: Build Windows x64 package
         shell: pwsh
         run: powershell -ExecutionPolicy Bypass -File apps/electron/scripts/build-win.ps1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
