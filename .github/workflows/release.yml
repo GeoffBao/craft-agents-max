@@ -73,7 +73,7 @@ jobs:
 
       - name: Build Windows x64 package
         shell: pwsh
-        run: powershell -ExecutionPolicy Bypass -File apps/electron/scripts/build-win.ps1
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File apps/electron/scripts/build-win.ps1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
