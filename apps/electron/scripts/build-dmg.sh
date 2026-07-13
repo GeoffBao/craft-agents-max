@@ -216,6 +216,9 @@ cd "$ELECTRON_DIR"
 
 # Set up environment for electron-builder. Use unsigned packaging unless
 # signing credentials are actually configured for this runner.
+if [ -z "$CSC_LINK" ]; then
+    unset CSC_LINK CSC_KEY_PASSWORD
+fi
 if [ -n "$APPLE_SIGNING_IDENTITY" ] || [ -n "$CSC_LINK" ]; then
     export CSC_IDENTITY_AUTO_DISCOVERY=true
 else
