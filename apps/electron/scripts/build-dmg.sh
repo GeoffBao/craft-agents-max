@@ -214,8 +214,13 @@ bun run electron:build
 echo "Packaging app with electron-builder..."
 cd "$ELECTRON_DIR"
 
-# Set up environment for electron-builder
-export CSC_IDENTITY_AUTO_DISCOVERY=true
+# Set up environment for electron-builder. Use unsigned packaging unless
+# signing credentials are actually configured for this runner.
+if [ -n "$APPLE_SIGNING_IDENTITY" ] || [ -n "$CSC_LINK" ]; then
+    export CSC_IDENTITY_AUTO_DISCOVERY=true
+else
+    export CSC_IDENTITY_AUTO_DISCOVERY=false
+fi
 
 # Build electron-builder arguments
 BUILDER_ARGS="--mac --${ARCH}"
